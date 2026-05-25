@@ -1,0 +1,82 @@
+name: pos_app
+description: A Flutter Point of Sale application with offline-first support.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # Local database (Drift/SQLite)
+  drift: ^2.22.0
+  sqlite3_flutter_libs: ^0.5.27
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+  # Networking
+  dio: ^5.7.0
+  connectivity_plus: ^6.1.1
+
+  # Models / serialization
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # Typography
+  google_fonts: ^6.2.1
+
+  # Formatting & localization
+  intl: ^0.19.0
+
+  # Receipt / printing
+  pdf: ^3.11.1
+  printing: ^5.13.2
+
+  # Utilities
+  shared_preferences: ^2.3.3
+  local_auth: ^2.3.0
+  uuid: ^4.5.1
+  cached_network_image: ^3.4.1
+  package_info_plus: ^8.1.2
+  qr_flutter: ^4.1.0
+  fl_chart: ^0.69.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.14.3
+
+  # Code generation
+  build_runner: ^2.4.13
+  drift_dev: ^2.22.0
+  riverpod_generator: ^2.6.1
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+
+  # Linting
+  flutter_lints: ^4.0.0
+  custom_lint: ^0.7.0
+  riverpod_lint: ^2.6.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/x-logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/x-logo.png"
+  min_sdk_android: 21
