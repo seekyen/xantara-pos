@@ -6,6 +6,8 @@ import '../../pos/providers/pos_provider.dart';
 import '../providers/checkout_provider.dart';
 import '../widgets/receipt_preview.dart';
 import '../../orders/providers/orders_provider.dart';
+import '../../customer_display/customer_display_bridge.dart';
+import '../../customer_display/providers/customer_display_providers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 
@@ -108,6 +110,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final vat = subtotal * _kVat;
     final total = (subtotal + vat - _discount).clamp(0.0, double.infinity);
 
+    // Sync customer display payment selection back to the cashier screen.
+    ref.listen<PaymentMethod?>(
+      customerDisplayStateProvider.select((s) => s.selectedPaymentMethod),
+      (_, method) {
+        if (method != null && _onPaymentPage) {
+          setState(() {
+            _selectedMethod = method;
+            _tendered = 0;
+          });
+        }
+      },
+    );
+
     return DraggableScrollableSheet(
       initialChildSize: 0.92,
       minChildSize: 0.5,
@@ -158,7 +173,20 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       promoController: _promoController,
                       onApplyPromo: _applyPromo,
                       onProceed: cartItems.isNotEmpty
-                          ? () => setState(() => _onPaymentPage = true)
+                          ? () {
+                              setState(() => _onPaymentPage = true);
+                              final windowId = ref.read(
+                                  customerDisplayWindowIdProvider);
+                              if (windowId != null) {
+                                CustomerDisplayBridge.sendProceedToPayment(
+                                  windowId,
+                                  subtotal: subtotal,
+                                  tax: vat,
+                                  discount: _discount,
+                                  total: total,
+                                ).ignore();
+                              }
+                            }
                           : null,
                       onClose: () => Navigator.pop(context),
                       onClear: () => _showVoidDialog(
@@ -445,14 +473,14 @@ class _CartPage extends StatelessWidget {
                     child: Column(
                       children: [
                         _SummaryLine('Subtotal',
-                            '₱${subtotal.toStringAsFixed(0)}'),
+                            '₱${subtotal.toStringAsFixed(2)}'),
                         const SizedBox(height: 8),
                         _SummaryLine('VAT (12%)',
-                            '₱${vat.toStringAsFixed(0)}'),
+                            '₱${vat.toStringAsFixed(2)}'),
                         if (discount > 0) ...[
                           const SizedBox(height: 8),
                           _SummaryLine('Discount',
-                              '-₱${discount.toStringAsFixed(0)}',
+                              '-₱${discount.toStringAsFixed(2)}',
                               valueColor: AppColors.success),
                         ],
                         const SizedBox(height: AppSizes.md),
@@ -468,7 +496,7 @@ class _CartPage extends StatelessWidget {
                                     color: AppColors.gray800)),
                             const Spacer(),
                             Text(
-                              '₱${total.toStringAsFixed(0)}',
+                              '₱${total.toStringAsFixed(2)}',
                               style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w700,
@@ -764,7 +792,7 @@ class _PaymentPage extends StatelessWidget {
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
                       Text(
-                        '₱${total.toStringAsFixed(0)}',
+                        '₱${total.toStringAsFixed(2)}',
                         style: const TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.w700,

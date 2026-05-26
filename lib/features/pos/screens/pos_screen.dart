@@ -1,42 +1,98 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../checkout/providers/checkout_provider.dart';
 import '../../checkout/screens/checkout_screen.dart';
+import '../../customer_display/customer_display_bridge.dart';
+import '../../customer_display/providers/customer_display_providers.dart';
 import '../providers/cart_provider.dart';
 import '../widgets/category_bar.dart';
 import '../widgets/product_grid.dart';
-import '../widgets/cart_panel.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../shared/widgets/offline_banner.dart';
+import '../../../utils/platform_utils.dart';
+import 'pos_screen_tablet.dart';
+import 'pos_screen_desktop.dart';
+
+const _kVat = 0.12;
+
+// Converts the current cart into OrderItems, updates local CustomerDisplayState,
+// and sends the payload to the customer display window via method channel.
+void _syncCartToDisplay(
+    WidgetRef ref, List<CartItem> cartItems, int windowId) {
+  final subtotal = cartItems.fold(0.0, (s, i) => s + i.subtotal);
+  final tax = subtotal * _kVat;
+  final total = subtotal + tax;
+
+  final orderItems = cartItems
+      .map((i) => OrderItem(
+            name: i.product.name,
+            price: i.product.price,
+            quantity: i.quantity,
+            subtotal: i.subtotal,
+          ))
+      .toList();
+
+  final state = ref.read(customerDisplayStateProvider);
+  state.updateOrder(
+    orderItems,
+    subtotal: subtotal,
+    tax: tax,
+    discount: 0,
+    total: total,
+  );
+
+  CustomerDisplayBridge.sendUpdateOrder(windowId, state).ignore();
+}
 
 class PosScreen extends ConsumerWidget {
   const PosScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isTablet = MediaQuery.of(context).size.width >= 600;
+    final layout = getLayout(context);
+
+    // Sync every cart change to the customer display window in real time.
+    // Fires whenever items are added, removed, or qty changes.
+    ref.listen<List<CartItem>>(cartProvider, (_, cartItems) {
+      final windowId = ref.read(customerDisplayWindowIdProvider);
+      if (windowId == null) return;
+      _syncCartToDisplay(ref, cartItems, windowId);
+    });
 
     return Scaffold(
       backgroundColor: AppColors.gray50,
-      appBar: _buildAppBar(context, ref),
+      appBar: _buildAppBar(context, ref, layout),
       body: Column(
         children: [
           const OfflineBanner(),
           Expanded(
-            child: isTablet
-                ? _TabletLayout(onCheckout: () => _showCheckout(context))
-                : _PhoneLayout(onCheckout: () => _showCheckout(context)),
+            child: switch (layout) {
+              // DESKTOP — 3-column persistent layout, checkout as dialog
+              AppLayout.desktop => PosDesktopLayout(
+                  onCheckout: () => _showCheckoutDialog(context)),
+              // TABLET — 2-panel layout, checkout as bottom sheet
+              AppLayout.tablet => PosTabletLayout(
+                  onCheckout: () => _showCheckout(context)),
+              // existing mobile layout, untouched
+              AppLayout.mobile => _PhoneLayout(
+                  onCheckout: () => _showCheckout(context)),
+            },
           ),
         ],
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, WidgetRef ref) {
+  PreferredSizeWidget _buildAppBar(
+      BuildContext context, WidgetRef ref, AppLayout layout) {
     final user = ref.watch(authProvider).user;
     final itemCount = ref.watch(cartItemCountProvider);
-    final isTablet = MediaQuery.of(context).size.width >= 600;
+    final isMobile = layout == AppLayout.mobile;
 
     return AppBar(
       backgroundColor: Colors.white,
@@ -82,7 +138,11 @@ class PosScreen extends ConsumerWidget {
               ],
             ),
           ),
-        if (!isTablet)
+        // Open Customer Display button — tablet + desktop only
+        if (!isMobile && (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+          _OpenCustomerDisplayButton(),
+        // cart icon only on mobile — tablet/desktop show cart in the panel
+        if (isMobile)
           Stack(
             alignment: Alignment.center,
             children: [
@@ -114,13 +174,16 @@ class PosScreen extends ConsumerWidget {
             ],
           ),
       ],
-      bottom: const PreferredSize(
-        preferredSize: Size.fromHeight(52),
-        child: Padding(
-          padding: EdgeInsets.only(bottom: AppSizes.sm),
-          child: CategoryBar(),
-        ),
-      ),
+      // DESKTOP — CategoryBar is in the sidebar; hide it from the AppBar
+      bottom: layout != AppLayout.desktop
+          ? const PreferredSize(
+              preferredSize: Size.fromHeight(52),
+              child: Padding(
+                padding: EdgeInsets.only(bottom: AppSizes.sm),
+                child: CategoryBar(),
+              ),
+            )
+          : null,
     );
   }
 
@@ -132,22 +195,21 @@ class PosScreen extends ConsumerWidget {
       builder: (_) => const CheckoutScreen(),
     );
   }
-}
 
-class _TabletLayout extends StatelessWidget {
-  const _TabletLayout({required this.onCheckout});
-  final VoidCallback onCheckout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(flex: 6, child: ProductGrid()),
-        SizedBox(
-          width: 320,
-          child: CartPanel(onCheckout: onCheckout),
+  // DESKTOP — checkout as a dialog instead of a bottom sheet
+  void _showCheckoutDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 80, vertical: 32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppSizes.rCardLg),
+          child: const CheckoutScreen(),
         ),
-      ],
+      ),
     );
   }
 }
@@ -254,5 +316,79 @@ class _FloatingCheckoutBar extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// DESKTOP/TABLET — opens the customer-facing display window on a second monitor.
+class _OpenCustomerDisplayButton extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final windowId = ref.watch(customerDisplayWindowIdProvider);
+    final isOpen = windowId != null;
+
+    return Tooltip(
+      message: isOpen ? 'Customer Display open' : 'Open Customer Display',
+      child: IconButton(
+        icon: Icon(
+          isOpen ? Icons.monitor_rounded : Icons.monitor_outlined,
+          color: isOpen ? AppColors.primary : AppColors.gray800,
+        ),
+        onPressed: isOpen ? null : () => _openCustomerDisplay(context, ref),
+      ),
+    );
+  }
+
+  Future<void> _openCustomerDisplay(BuildContext context, WidgetRef ref) async {
+    try {
+      final controller = await DesktopMultiWindow.createWindow(
+        jsonEncode({'type': 'customer_display'}),
+      );
+      await controller.setFrame(const Rect.fromLTWH(0, 0, 1280, 800));
+      await controller.center();
+      await controller.setTitle('Xantara POS — Customer Display');
+      await controller.show();
+
+      ref.read(customerDisplayWindowIdProvider.notifier).state =
+          controller.windowId;
+
+      // Initial sync — give the customer display window time to set up its
+      // method channel handler before sending the first message.
+      Future.delayed(const Duration(milliseconds: 600), () {
+        final cartItems = ref.read(cartProvider);
+        if (cartItems.isNotEmpty) {
+          _syncCartToDisplay(ref, cartItems, controller.windowId);
+        }
+      });
+
+      // Listen for messages sent back from the customer display window.
+      CustomerDisplayBridge.listenFromCustomerDisplay(
+        onMessage: (method, args) {
+          final state = ref.read(customerDisplayStateProvider);
+          switch (method) {
+            case 'cd_setTip':
+              final data = jsonDecode(args as String) as Map<String, dynamic>;
+              state.setTip((data['amount'] as num).toDouble());
+            case 'cd_selectPaymentMethod':
+              final data = jsonDecode(args as String) as Map<String, dynamic>;
+              final methodName = data['method'] as String;
+              final matches =
+                  PaymentMethod.values.where((e) => e.name == methodName);
+              if (matches.isNotEmpty) state.selectPaymentMethod(matches.first);
+            case 'cd_setTenderedAmount':
+              final data = jsonDecode(args as String) as Map<String, dynamic>;
+              state.setTenderedAmount((data['amount'] as num).toDouble());
+          }
+        },
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open customer display: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 }

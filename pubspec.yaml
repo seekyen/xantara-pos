@@ -49,6 +49,8 @@ dependencies:
   package_info_plus: ^8.1.2
   qr_flutter: ^4.1.0
   fl_chart: ^0.69.0
+  window_manager: ^0.4.2
+  desktop_multi_window: ^0.2.0
 
 dev_dependencies:
   flutter_test:
