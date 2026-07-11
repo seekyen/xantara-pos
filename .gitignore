@@ -44,5 +44,9 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Local portable Flutter SDK / scratch output — not part of source
+.tools/
+/output/
+/tmp/
 
 .claude/

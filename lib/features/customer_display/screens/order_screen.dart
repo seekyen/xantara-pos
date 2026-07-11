@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
 import '../../../../features/checkout/providers/checkout_provider.dart';
 import '../providers/customer_display_providers.dart';
 
@@ -83,14 +84,10 @@ class _OrderHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSizes.md),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Your Order',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTextStyles.displayMd.copyWith(color: Colors.white),
               ),
             ),
             if (itemCount > 0)
@@ -103,11 +100,8 @@ class _OrderHeader extends StatelessWidget {
                 ),
                 child: Text(
                   '$itemCount item${itemCount != 1 ? 's' : ''}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTextStyles.bodyLg.copyWith(
+                      fontWeight: FontWeight.w600, color: Colors.white),
                 ),
               ),
           ],
@@ -141,11 +135,8 @@ class _OrderItemRow extends StatelessWidget {
             child: Center(
               child: Text(
                 item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTextStyles.statNumber
+                    .copyWith(color: AppColors.primary),
               ),
             ),
           ),
@@ -158,21 +149,16 @@ class _OrderItemRow extends StatelessWidget {
               children: [
                 Text(
                   item.name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.gray800,
-                  ),
+                  style: AppTextStyles.titleLg.copyWith(
+                      fontSize: 18, fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${item.quantity} × ₱${item.price.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: AppColors.gray400,
-                  ),
+                  style: AppTextStyles.bodyLg
+                      .copyWith(color: AppColors.gray400),
                 ),
               ],
             ),
@@ -181,11 +167,7 @@ class _OrderItemRow extends StatelessWidget {
           // Line subtotal
           Text(
             '₱${item.subtotal.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
+            style: AppTextStyles.statNumber.copyWith(color: AppColors.primary),
           ),
         ],
       ),
@@ -215,18 +197,15 @@ class _EmptyOrder extends StatelessWidget {
                 color: AppColors.primary, size: 36),
           ),
           const SizedBox(height: AppSizes.lg),
-          const Text(
+          Text(
             'No items yet',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: AppColors.gray800,
-            ),
+            style: AppTextStyles.statNumber.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: AppSizes.sm),
-          const Text(
+          Text(
             'Items will appear here as your cashier adds them.',
-            style: TextStyle(fontSize: 16, color: AppColors.gray400),
+            style: AppTextStyles.bodyLg
+                .copyWith(fontSize: 16, color: AppColors.gray400),
             textAlign: TextAlign.center,
           ),
         ],
@@ -293,14 +272,10 @@ class _PriceSummary extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'TOTAL',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.gray800,
-                  letterSpacing: 0.5,
-                ),
+                style: AppTextStyles.displayMd
+                    .copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
               ),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
@@ -316,23 +291,18 @@ class _PriceSummary extends StatelessWidget {
                 child: Text(
                   '₱${total.toStringAsFixed(2)}',
                   key: ValueKey(total),
-                  style: const TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primary,
-                  ),
+                  style: AppTextStyles.heroNumber.copyWith(
+                      fontWeight: FontWeight.w800, color: AppColors.primary),
                 ),
               ),
             ],
           ),
           const SizedBox(height: AppSizes.md),
           // Prompt
-          const Text(
+          Text(
             'Please review your order. Your cashier will proceed when ready.',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.gray400,
-            ),
+            style: AppTextStyles.bodyMd
+                .copyWith(fontSize: 14, color: AppColors.gray400),
             textAlign: TextAlign.center,
           ),
         ],
@@ -360,9 +330,10 @@ class _SummaryRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: TextStyle(fontSize: fontSize, color: AppColors.gray400)),
+            style: AppTextStyles.bodyMd
+                .copyWith(fontSize: fontSize, color: AppColors.gray400)),
         Text(value,
-            style: TextStyle(
+            style: AppTextStyles.bodyMd.copyWith(
                 fontSize: fontSize,
                 color: valueColor,
                 fontWeight: FontWeight.w500)),

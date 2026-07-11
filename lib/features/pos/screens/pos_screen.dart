@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../checkout/providers/checkout_provider.dart';
@@ -9,24 +10,25 @@ import '../../checkout/screens/checkout_screen.dart';
 import '../../customer_display/customer_display_bridge.dart';
 import '../../customer_display/providers/customer_display_providers.dart';
 import '../providers/cart_provider.dart';
+import '../providers/pos_provider.dart';
 import '../widgets/category_bar.dart';
 import '../widgets/product_grid.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/widgets/offline_banner.dart';
 import '../../../utils/platform_utils.dart';
 import 'pos_screen_tablet.dart';
 import 'pos_screen_desktop.dart';
 
-const _kVat = 0.12;
-
 // Converts the current cart into OrderItems, updates local CustomerDisplayState,
 // and sends the payload to the customer display window via method channel.
-void _syncCartToDisplay(
-    WidgetRef ref, List<CartItem> cartItems, int windowId) {
+void _syncCartToDisplay(WidgetRef ref, List<CartItem> cartItems, int windowId) {
   final subtotal = cartItems.fold(0.0, (s, i) => s + i.subtotal);
-  final tax = subtotal * _kVat;
-  final total = subtotal + tax;
+  final subtotalCentavos = (subtotal * 100).round();
+  final vatableCentavos = (subtotalCentavos * 10000 / 11200).round();
+  final tax = (subtotalCentavos - vatableCentavos) / 100;
+  final total = subtotal;
 
   final orderItems = cartItems
       .map((i) => OrderItem(
@@ -76,11 +78,11 @@ class PosScreen extends ConsumerWidget {
               AppLayout.desktop => PosDesktopLayout(
                   onCheckout: () => _showCheckoutDialog(context)),
               // TABLET — 2-panel layout, checkout as bottom sheet
-              AppLayout.tablet => PosTabletLayout(
-                  onCheckout: () => _showCheckout(context)),
+              AppLayout.tablet =>
+                PosTabletLayout(onCheckout: () => _showCheckout(context)),
               // existing mobile layout, untouched
-              AppLayout.mobile => _PhoneLayout(
-                  onCheckout: () => _showCheckout(context)),
+              AppLayout.mobile =>
+                _PhoneLayout(onCheckout: () => _showCheckout(context)),
             },
           ),
         ],
@@ -93,6 +95,7 @@ class PosScreen extends ConsumerWidget {
     final user = ref.watch(authProvider).user;
     final itemCount = ref.watch(cartItemCountProvider);
     final isMobile = layout == AppLayout.mobile;
+    final branch = retailBranchFor(ref.watch(activeBranchProvider));
 
     return AppBar(
       backgroundColor: Colors.white,
@@ -100,6 +103,15 @@ class PosScreen extends ConsumerWidget {
       surfaceTintColor: Colors.transparent,
       title: Image.asset('assets/images/xantara-logo.png', height: 30),
       actions: [
+        if (!isMobile)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSizes.sm),
+            child: Chip(
+              avatar: const Icon(Icons.storefront_outlined, size: 16),
+              label: Text(branch.name),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
         if (user != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSizes.sm),
@@ -115,31 +127,26 @@ class PosScreen extends ConsumerWidget {
                   ),
                   child: Center(
                     child: Text(
-                      user.name.isNotEmpty
-                          ? user.name[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                      style: AppTextStyles.labelMd.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: AppColors.primary),
                     ),
                   ),
                 ),
                 const SizedBox(width: AppSizes.xs),
                 Text(
                   user.name,
-                  style: const TextStyle(
-                    color: AppColors.gray800,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
             ),
           ),
         // Open Customer Display button — tablet + desktop only
-        if (!isMobile && (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
+        if (!kIsWeb &&
+            !isMobile &&
+            (Platform.isWindows || Platform.isMacOS || Platform.isLinux))
           _OpenCustomerDisplayButton(),
         // cart icon only on mobile — tablet/desktop show cart in the panel
         if (isMobile)
@@ -163,10 +170,10 @@ class PosScreen extends ConsumerWidget {
                     child: Center(
                       child: Text(
                         '$itemCount',
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: AppTextStyles.labelSm.copyWith(
                             fontSize: 10,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
                       ),
                     ),
                   ),
@@ -203,8 +210,7 @@ class PosScreen extends ConsumerWidget {
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
-        insetPadding:
-            const EdgeInsets.symmetric(horizontal: 80, vertical: 32),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 32),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppSizes.rCardLg),
           child: const CheckoutScreen(),
@@ -283,31 +289,19 @@ class _FloatingCheckoutBar extends StatelessWidget {
               ),
               child: Text(
                 '$itemCount item${itemCount > 1 ? 's' : ''}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
+                style: AppTextStyles.labelMd.copyWith(color: Colors.white),
               ),
             ),
             const SizedBox(width: AppSizes.md),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Checkout',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
+                style: AppTextStyles.titleMd.copyWith(color: Colors.white),
               ),
             ),
             Text(
               '₱${total.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
+              style: AppTextStyles.titleMd.copyWith(color: Colors.white),
             ),
             const SizedBox(width: AppSizes.sm),
             const Icon(Icons.arrow_forward_ios_rounded,

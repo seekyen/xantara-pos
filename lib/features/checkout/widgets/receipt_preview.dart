@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../providers/checkout_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
+import '../../../shared/widgets/status_banner.dart';
 
 class ReceiptPreview extends StatelessWidget {
   const ReceiptPreview({super.key, required this.order});
@@ -11,6 +12,7 @@ class ReceiptPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bir = order.birReceipt;
     final txnId = order.id.length >= 12
         ? order.id.substring(0, 12).toUpperCase()
         : order.id.toUpperCase();
@@ -43,17 +45,11 @@ class ReceiptPreview extends StatelessWidget {
                     color: AppColors.success, size: 28),
               ),
               const SizedBox(height: AppSizes.md),
-              const Text('Payment Successful!',
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.gray800)),
+              const Text('Payment Successful!', style: AppTextStyles.titleLg),
               const SizedBox(height: 4),
               Text(
-                DateFormat('MMMM dd, yyyy  hh:mm a')
-                    .format(order.timestamp),
-                style: const TextStyle(
-                    fontSize: 11, color: AppColors.gray400),
+                DateFormat('MMMM dd, yyyy  hh:mm a').format(order.timestamp),
+                style: AppTextStyles.caption,
               ),
               const SizedBox(height: AppSizes.lg),
 
@@ -68,6 +64,13 @@ class ReceiptPreview extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (bir?.isTraining ?? false) ...[
+                      const StatusBanner(
+                        text: 'TRAINING / NOT AN OFFICIAL BIR INVOICE',
+                        tone: BannerTone.warning,
+                      ),
+                      const SizedBox(height: AppSizes.md),
+                    ],
                     Row(
                       children: [
                         Image.asset('assets/images/xantara-logo.png',
@@ -75,48 +78,54 @@ class ReceiptPreview extends StatelessWidget {
                             errorBuilder: (_, __, ___) =>
                                 const SizedBox.shrink()),
                         const SizedBox(width: AppSizes.sm),
-                        const Text('Xantara POS',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: AppColors.gray800)),
+                        Text('Xantara POS',
+                            style: AppTextStyles.bodyMd
+                                .copyWith(fontWeight: FontWeight.w700)),
                       ],
                     ),
                     const SizedBox(height: AppSizes.xs),
                     Text(
-                      'TXN: $txnId',
-                      style: GoogleFonts.dmMono(
-                          fontSize: 10, color: AppColors.gray400),
+                      bir == null
+                          ? 'TXN: $txnId'
+                          : 'INVOICE: ${bir.invoiceNumber}',
+                      style: AppTextStyles.monoSm.copyWith(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w400,
+                          color: AppColors.gray400),
                     ),
+                    if (bir != null) ...[
+                      const SizedBox(height: 4),
+                      Text(bir.sellerName,
+                          style: AppTextStyles.titleSm.copyWith(fontSize: 10)),
+                      Text('TIN: ${bir.sellerTin}',
+                          style: AppTextStyles.caption
+                              .copyWith(fontSize: 9, color: AppColors.gray600)),
+                      Text(bir.sellerAddress,
+                          style: AppTextStyles.caption
+                              .copyWith(fontSize: 9, color: AppColors.gray600)),
+                    ],
                     const SizedBox(height: AppSizes.md),
                     _DashedDivider(),
                     const SizedBox(height: AppSizes.md),
 
                     // Items
                     ...order.items.map((item) => Padding(
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 3),
+                          padding: const EdgeInsets.symmetric(vertical: 3),
                           child: Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('${item.quantity}×',
-                                  style: const TextStyle(
-                                      color: AppColors.gray400,
-                                      fontSize: 12)),
+                                  style: AppTextStyles.bodySm
+                                      .copyWith(color: AppColors.gray400)),
                               const SizedBox(width: AppSizes.sm),
                               Expanded(
                                 child: Text(item.name,
-                                    style: const TextStyle(
-                                        fontSize: 12,
-                                        color: AppColors.gray800)),
+                                    style: AppTextStyles.bodySm),
                               ),
                               Text(
                                 '₱${item.subtotal.toStringAsFixed(2)}',
-                                style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: AppColors.gray800),
+                                style: AppTextStyles.bodySm
+                                    .copyWith(fontWeight: FontWeight.w500),
                               ),
                             ],
                           ),
@@ -130,28 +139,45 @@ class ReceiptPreview extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('TOTAL',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: AppColors.gray800)),
+                        Text('TOTAL',
+                            style: AppTextStyles.bodyMd
+                                .copyWith(fontWeight: FontWeight.w700)),
                         Text('₱${order.total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 16,
-                                color: AppColors.primary)),
+                            style: AppTextStyles.titleMd.copyWith(
+                                fontSize: 16, color: AppColors.primary)),
                       ],
                     ),
                     const SizedBox(height: AppSizes.sm),
 
+                    if (bir != null) ...[
+                      _ReceiptRow(
+                        label: 'VATable Sales',
+                        value: _money(bir.vatableSalesCentavos),
+                      ),
+                      _ReceiptRow(
+                        label: 'VAT (12%)',
+                        value: _money(bir.vatAmountCentavos),
+                      ),
+                      if (bir.zeroRatedSalesCentavos > 0)
+                        _ReceiptRow(
+                          label: 'Zero-rated Sales',
+                          value: _money(bir.zeroRatedSalesCentavos),
+                        ),
+                      if (bir.vatExemptSalesCentavos > 0)
+                        _ReceiptRow(
+                          label: 'VAT-exempt Sales',
+                          value: _money(bir.vatExemptSalesCentavos),
+                        ),
+                    ],
+
                     // Payment details
                     _ReceiptRow(
                       label: 'Payment',
-                      value: order.paymentMethod == PaymentMethod.cash
-                          ? 'Cash'
-                          : order.paymentMethod == PaymentMethod.card
-                              ? 'Card'
-                              : 'GCash / Maya',
+                      value: order.paymentMethod.label,
+                    ),
+                    _ReceiptRow(
+                      label: 'Reference',
+                      value: order.paymentReference,
                     ),
                     if (order.paymentMethod == PaymentMethod.cash) ...[
                       _ReceiptRow(
@@ -161,20 +187,26 @@ class ReceiptPreview extends StatelessWidget {
                       ),
                       _ReceiptRow(
                         label: 'Change',
-                        value:
-                            '₱${order.change?.toStringAsFixed(2) ?? '0.00'}',
+                        value: '₱${order.change?.toStringAsFixed(2) ?? '0.00'}',
                         valueColor: AppColors.success,
                       ),
                     ],
+                    if (bir != null) ...[
+                      const SizedBox(height: AppSizes.sm),
+                      Text('MIN: ${bir.machineIdentificationNumber}',
+                          style: AppTextStyles.caption.copyWith(fontSize: 8)),
+                      Text('PTU: ${bir.permitToUseNumber}',
+                          style: AppTextStyles.caption.copyWith(fontSize: 8)),
+                      Text('Serial: ${bir.machineSerialNumber}',
+                          style: AppTextStyles.caption.copyWith(fontSize: 8)),
+                    ],
 
                     const SizedBox(height: AppSizes.md),
-                    const Center(
+                    Center(
                       child: Text(
                         'Thank you for your purchase!',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: AppColors.gray400),
+                        style: AppTextStyles.caption
+                            .copyWith(fontStyle: FontStyle.italic),
                       ),
                     ),
                   ],
@@ -193,12 +225,10 @@ class ReceiptPreview extends StatelessWidget {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppSizes.rButton)),
+                        borderRadius: BorderRadius.circular(AppSizes.rButton)),
                   ),
-                  child: const Text('New Sale',
-                      style: TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700)),
+                  child: Text('New Sale',
+                      style: AppTextStyles.titleMd.copyWith(color: Colors.white)),
                 ),
               ),
             ],
@@ -208,6 +238,8 @@ class ReceiptPreview extends StatelessWidget {
     );
   }
 }
+
+String _money(int centavos) => 'PHP ${(centavos / 100).toStringAsFixed(2)}';
 
 class _ReceiptRow extends StatelessWidget {
   const _ReceiptRow({
@@ -226,11 +258,9 @@ class _ReceiptRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label,
-                style: const TextStyle(
-                    color: AppColors.gray600, fontSize: 12)),
+                style: AppTextStyles.bodySm.copyWith(color: AppColors.gray600)),
             Text(value,
-                style: TextStyle(
-                    fontSize: 12,
+                style: AppTextStyles.bodySm.copyWith(
                     fontWeight: FontWeight.w600,
                     color: valueColor ?? AppColors.gray800)),
           ],

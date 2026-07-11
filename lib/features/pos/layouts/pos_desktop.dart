@@ -7,6 +7,7 @@ import '../widgets/product_grid.dart';
 import '../widgets/cart_panel.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 
 // DESKTOP — persistent 3-column layout with keyboard shortcuts
 class PosDesktopLayout extends ConsumerWidget {
@@ -75,15 +76,7 @@ class _CategorySidebar extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(
                 AppSizes.md, AppSizes.md, AppSizes.md, AppSizes.sm),
-            child: Text(
-              'CATEGORIES',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: AppColors.gray400,
-                letterSpacing: 0.8,
-              ),
-            ),
+            child: Text('CATEGORIES', style: AppTextStyles.labelCaps),
           ),
           Expanded(
             child: ListView(
@@ -129,8 +122,7 @@ class _CategorySidebar extends ConsumerWidget {
                           Expanded(
                             child: Text(
                               cat.name,
-                              style: TextStyle(
-                                fontSize: 13,
+                              style: AppTextStyles.bodyMd.copyWith(
                                 fontWeight: isSelected
                                     ? FontWeight.w600
                                     : FontWeight.w500,

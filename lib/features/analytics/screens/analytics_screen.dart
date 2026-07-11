@@ -41,8 +41,7 @@ final _topProductsProvider =
   return sorted.take(5).map((e) => (name: e.key, revenue: e.value)).toList();
 });
 
-final _paymentBreakdownProvider =
-    Provider<Map<PaymentMethod, double>>((ref) {
+final _paymentBreakdownProvider = Provider<Map<PaymentMethod, double>>((ref) {
   final orders = ref.watch(ordersProvider);
   final Map<PaymentMethod, double> breakdown = {};
   for (final rec in orders) {
@@ -83,16 +82,13 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
             : 30.0;
     final displayedSales =
         netSales > 0 ? netSales * multiplier : 38450.0 * multiplier / 7;
-    final displayedTxn =
-        txnCount > 0 ? (txnCount * multiplier).round() : 47;
-    final displayedAvg = displayedTxn > 0
-        ? (displayedSales / displayedTxn)
-        : 817.0;
+    final displayedTxn = txnCount > 0 ? (txnCount * multiplier).round() : 47;
+    final displayedAvg =
+        displayedTxn > 0 ? (displayedSales / displayedTxn) : 817.0;
 
     return Scaffold(
       backgroundColor: AppColors.darkBg,
-      bottomNavigationBar:
-          const BottomTabBar(currentIndex: 1, isDark: true),
+      bottomNavigationBar: const BottomTabBar(currentIndex: 1, isDark: true),
       body: Column(
         children: [
           // ── Dark header ──────────────────────────────────────────────
@@ -186,19 +182,15 @@ class _AnalyticsHeader extends ConsumerWidget {
           // "Analytics" pill — centered top
           Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 18, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.darkSurface,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text(
+              child: Text(
                 'Analytics',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
+                style: AppTextStyles.labelMd
+                    .copyWith(fontSize: 12, color: Colors.white),
               ),
             ),
           ),
@@ -207,14 +199,8 @@ class _AnalyticsHeader extends ConsumerWidget {
           // "Reports" + period pills
           Row(
             children: [
-              const Text(
-                'Reports',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
+              Text('Reports',
+                  style: AppTextStyles.statNumber.copyWith(color: Colors.white)),
               const Spacer(),
               _PeriodPill(
                 label: 'Today',
@@ -240,10 +226,7 @@ class _AnalyticsHeader extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             'Net sales · ${netSalesRef > 0 ? '+${netSalesRef.toStringAsFixed(0)}' : '+12%'} vs yesterday',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.whiteOverlay60,
-            ),
+            style: AppTextStyles.bodySm.copyWith(color: AppColors.whiteOverlay60),
           ),
           const SizedBox(height: 16),
 
@@ -281,9 +264,8 @@ class _PeriodPill extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: TextStyle(
+          style: AppTextStyles.labelSm.copyWith(
             fontSize: 10,
-            fontWeight: FontWeight.w600,
             color: active ? Colors.white : Colors.white.withValues(alpha: 0.5),
           ),
         ),
@@ -305,7 +287,15 @@ class _RevenueBarChart extends StatelessWidget {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final todayIndex = DateTime.now().weekday - 1; // 0=Mon, 6=Sun
 
-    final mockValues = [32000.0, 28500.0, 41200.0, 35800.0, 29400.0, 44100.0, 38450.0];
+    final mockValues = [
+      32000.0,
+      28500.0,
+      41200.0,
+      35800.0,
+      29400.0,
+      44100.0,
+      38450.0
+    ];
     if (todaySales > 0) mockValues[todayIndex] = todaySales;
     final maxY = mockValues.reduce(math.max) * 1.25;
 
@@ -320,12 +310,12 @@ class _RevenueBarChart extends StatelessWidget {
           maxY: maxY,
           titlesData: FlTitlesData(
             show: true,
-            leftTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
+            leftTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -338,11 +328,9 @@ class _RevenueBarChart extends StatelessWidget {
                   final isToday = i == todayIndex;
                   return Text(
                     days[i],
-                    style: TextStyle(
+                    style: AppTextStyles.bodySm.copyWith(
                       fontSize: 10,
-                      fontWeight: isToday
-                          ? FontWeight.w700
-                          : FontWeight.w400,
+                      fontWeight: isToday ? FontWeight.w700 : FontWeight.w400,
                       color: isToday
                           ? Colors.white
                           : Colors.white.withValues(alpha: 0.4),
@@ -443,8 +431,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(value, style: AppTextStyles.statNumber),
           const SizedBox(height: 2),
-          Text(sub,
-              style: AppTextStyles.caption.copyWith(color: subColor)),
+          Text(sub, style: AppTextStyles.caption.copyWith(color: subColor)),
         ],
       ),
     );
@@ -484,27 +471,19 @@ class _TopProducts extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Top Products',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.gray800,
-          ),
-        ),
+        Text('Top Products',
+            style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
         if (products.isEmpty)
           Text('No orders yet',
-              style: AppTextStyles.caption.copyWith(
-                  color: AppColors.gray400))
+              style: AppTextStyles.caption.copyWith(color: AppColors.gray400))
         else
           ...products.map(
             (p) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
                 children: [
-                  Expanded(
-                      child: Text(p.name, style: AppTextStyles.body)),
+                  Expanded(child: Text(p.name, style: AppTextStyles.body)),
                   Text(
                     '₱${p.revenue.toStringAsFixed(2)}',
                     style: AppTextStyles.body.copyWith(
@@ -530,27 +509,23 @@ class _PaymentBreakdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total =
-        breakdown.values.fold(0.0, (sum, v) => sum + v);
+    final total = breakdown.values.fold(0.0, (sum, v) => sum + v);
     final cashTotal = breakdown[PaymentMethod.cash] ?? 0;
-    final qrTotal = breakdown[PaymentMethod.qrph] ?? 0;
+    final digitalTotal = breakdown.entries
+        .where((entry) => entry.key != PaymentMethod.cash)
+        .fold(0.0, (sum, entry) => sum + entry.value);
 
     final cashPct = total > 0 ? (cashTotal / total * 100).round() : 50;
-    final qrPct = total > 0 ? (qrTotal / total * 100).round() : 50;
-    final cashFlex = total > 0 ? (cashTotal / total * 10).round().clamp(1, 9) : 5;
-    final qrFlex = 10 - cashFlex;
+    final digitalPct = total > 0 ? (digitalTotal / total * 100).round() : 50;
+    final cashFlex =
+        total > 0 ? (cashTotal / total * 10).round().clamp(1, 9) : 5;
+    final digitalFlex = 10 - cashFlex;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Payment Breakdown',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.gray800,
-          ),
-        ),
+        Text('Payment Breakdown',
+            style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
@@ -563,7 +538,7 @@ class _PaymentBreakdown extends StatelessWidget {
                   child: Container(color: AppColors.success),
                 ),
                 Expanded(
-                  flex: qrFlex,
+                  flex: digitalFlex,
                   child: Container(color: AppColors.gcash),
                 ),
               ],
@@ -573,13 +548,9 @@ class _PaymentBreakdown extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            _LegendItem(
-                color: AppColors.success,
-                label: 'Cash $cashPct%'),
+            _LegendItem(color: AppColors.success, label: 'Cash $cashPct%'),
             const SizedBox(width: 14),
-            _LegendItem(
-                color: AppColors.gcash,
-                label: 'QR Ph $qrPct%'),
+            _LegendItem(color: AppColors.gcash, label: 'Digital $digitalPct%'),
           ],
         ),
       ],

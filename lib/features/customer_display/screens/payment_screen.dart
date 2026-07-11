@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
 import '../../../../features/checkout/providers/checkout_provider.dart';
 import '../customer_display_bridge.dart';
 import '../providers/customer_display_providers.dart';
@@ -43,22 +44,20 @@ class PaymentScreen extends ConsumerWidget {
                     ),
                     child: Column(
                       children: [
-                        const Text(
+                        Text(
                           'Amount Due',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.primary,
-                          ),
+                          style: AppTextStyles.bodyLg.copyWith(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.primary),
                         ),
                         const SizedBox(height: AppSizes.xs),
                         Text(
                           '₱${state.total.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 52,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
+                          style: AppTextStyles.heroNumber.copyWith(
+                              fontSize: 52,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary),
                         ),
                       ],
                     ),
@@ -68,22 +67,22 @@ class PaymentScreen extends ConsumerWidget {
 
                   const Text(
                     'How would you like to pay?',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.gray800,
-                    ),
+                    style: AppTextStyles.displayMd,
                     textAlign: TextAlign.center,
                   ),
 
                   const SizedBox(height: AppSizes.lg),
 
-                  // CUSTOMER_DISPLAY — large touch-friendly payment method cards
+                  // CUSTOMER_DISPLAY — large touch-friendly payment method cards.
+                  // Only cash is wired to a real payment path today; the rest
+                  // stay visible but disabled until a gateway is configured
+                  // (see docs/PAYMENT_ARCHITECTURE.md).
                   _PaymentCard(
                     icon: Icons.credit_card_rounded,
                     label: 'Credit / Debit Card',
-                    subtitle: 'Tap, insert, or swipe',
+                    subtitle: 'Requires a configured payment gateway',
                     selected: selected == PaymentMethod.card,
+                    enabled: false,
                     onTap: () => _select(ref, PaymentMethod.card),
                   ),
                   const SizedBox(height: AppSizes.md),
@@ -97,20 +96,37 @@ class PaymentScreen extends ConsumerWidget {
                   const SizedBox(height: AppSizes.md),
                   _PaymentCard(
                     icon: Icons.qr_code_rounded,
-                    label: 'GCash / Maya / QRPh',
-                    subtitle: 'Scan QR code to pay',
-                    selected: selected == PaymentMethod.qrph,
-                    onTap: () => _select(ref, PaymentMethod.qrph),
+                    label: 'GCash',
+                    subtitle: 'Requires a configured payment gateway',
+                    selected: selected == PaymentMethod.gcash,
+                    enabled: false,
+                    onTap: () => _select(ref, PaymentMethod.gcash),
+                  ),
+                  const SizedBox(height: AppSizes.md),
+                  _PaymentCard(
+                    icon: Icons.qr_code_2_rounded,
+                    label: 'Maya',
+                    subtitle: 'Requires a configured payment gateway',
+                    selected: selected == PaymentMethod.maya,
+                    enabled: false,
+                    onTap: () => _select(ref, PaymentMethod.maya),
+                  ),
+                  const SizedBox(height: AppSizes.md),
+                  _PaymentCard(
+                    icon: Icons.account_balance_rounded,
+                    label: 'Bank Transfer',
+                    subtitle: 'Requires a configured payment gateway',
+                    selected: selected == PaymentMethod.bank,
+                    enabled: false,
+                    onTap: () => _select(ref, PaymentMethod.bank),
                   ),
 
                   const SizedBox(height: AppSizes.xl),
 
-                  const Text(
+                  Text(
                     'Your cashier will complete the transaction after your selection.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.gray400,
-                    ),
+                    style: AppTextStyles.bodyMd
+                        .copyWith(fontSize: 14, color: AppColors.gray400),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -164,14 +180,10 @@ class _PaymentHeader extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSizes.md),
-            const Expanded(
+            Expanded(
               child: Text(
                 'Select Payment',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTextStyles.displayMd.copyWith(color: Colors.white),
               ),
             ),
             Container(
@@ -183,11 +195,8 @@ class _PaymentHeader extends StatelessWidget {
               ),
               child: Text(
                 '₱${total.toStringAsFixed(0)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style:
+                    AppTextStyles.titleLg.copyWith(fontSize: 16, color: Colors.white),
               ),
             ),
           ],
@@ -206,20 +215,24 @@ class _PaymentCard extends StatelessWidget {
     required this.subtitle,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String label;
   final String subtitle;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     // CUSTOMER_DISPLAY — min 80px height, touch-friendly, animated selection
     return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
+      onTap: enabled ? onTap : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         constraints: const BoxConstraints(minHeight: 80),
         padding: const EdgeInsets.symmetric(
@@ -258,17 +271,15 @@ class _PaymentCard extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(
+                    style: AppTextStyles.displayMd.copyWith(
                       fontSize: 20,
-                      fontWeight: FontWeight.w700,
                       color: selected ? AppColors.primary : AppColors.gray800,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 15,
+                    style: AppTextStyles.bodyLg.copyWith(
                       color: AppColors.gray400,
                     ),
                   ),
@@ -295,6 +306,7 @@ class _PaymentCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

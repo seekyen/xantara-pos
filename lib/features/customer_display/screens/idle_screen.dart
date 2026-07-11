@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 
 // CUSTOMER_DISPLAY — shown when no active order is in progress.
 class IdleScreen extends StatefulWidget {
@@ -86,22 +87,20 @@ class _IdleScreenState extends State<IdleScreen> {
                       const SizedBox(height: AppSizes.xxl),
 
                       // Welcome message
-                      const Text(
+                      Text(
                         'Welcome!',
-                        style: TextStyle(
+                        style: AppTextStyles.displayLg.copyWith(
                           color: Colors.white,
                           fontSize: 48,
-                          fontWeight: FontWeight.w700,
                           letterSpacing: -1,
                         ),
                       ),
                       const SizedBox(height: AppSizes.md),
                       Text(
                         'Your cashier will be with you shortly.',
-                        style: TextStyle(
+                        style: AppTextStyles.bodyLg.copyWith(
                           color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 20,
-                          fontWeight: FontWeight.w400,
                         ),
                       ),
 
@@ -110,21 +109,20 @@ class _IdleScreenState extends State<IdleScreen> {
                       // Current time — large, updates every second
                       Text(
                         DateFormat('h:mm:ss a').format(_now),
-                        style: const TextStyle(
+                        style: AppTextStyles.heroNumber.copyWith(
                           color: Colors.white,
                           fontSize: 56,
                           fontWeight: FontWeight.w300,
                           letterSpacing: 2,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(height: AppSizes.sm),
                       Text(
                         DateFormat('EEEE, MMMM d, yyyy').format(_now),
-                        style: TextStyle(
+                        style: AppTextStyles.bodyLg.copyWith(
                           color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 18,
-                          fontWeight: FontWeight.w400,
                         ),
                       ),
                     ],
@@ -137,9 +135,8 @@ class _IdleScreenState extends State<IdleScreen> {
                 padding: const EdgeInsets.all(AppSizes.xl),
                 child: Text(
                   'Powered by Xantara POS',
-                  style: TextStyle(
+                  style: AppTextStyles.bodyMd.copyWith(
                     color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 13,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 0.5,
                   ),

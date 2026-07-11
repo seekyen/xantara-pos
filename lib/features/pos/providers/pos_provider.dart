@@ -1,6 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
+import '../../../local/database_providers.dart';
+import '../../../local/database_seed.dart';
+import '../../../local/local_pos_store.dart';
+import '../../../local/repositories/catalog_repository.dart';
 
 class Category {
   final String id;
@@ -9,6 +16,21 @@ class Category {
 
   const Category({required this.id, required this.name, required this.icon});
 }
+
+class RetailBranch {
+  const RetailBranch({required this.code, required this.name});
+  final String code;
+  final String name;
+}
+
+const retailBranches = [
+  RetailBranch(code: 'MAIN', name: 'Main Branch'),
+  RetailBranch(code: 'BR002', name: 'Branch 2'),
+  RetailBranch(code: 'BR003', name: 'Branch 3'),
+];
+
+RetailBranch retailBranchFor(String code) =>
+    retailBranches.firstWhere((branch) => branch.code == code);
 
 class Product {
   final String id;
@@ -57,69 +79,117 @@ const staticCategories = [
   Category(id: 'desserts', name: 'Desserts', icon: Icons.cake_rounded),
 ];
 
-final _initialProducts = [
-  const Product(id: 'b1', name: 'Hot Coffee', price: 85, categoryId: 'beverages', color: Color(0xFF6F4E37), stock: 50),
-  const Product(id: 'b2', name: 'Iced Coffee', price: 95, categoryId: 'beverages', color: Color(0xFF4A90D9), stock: 40),
-  const Product(id: 'b3', name: 'Green Tea', price: 75, categoryId: 'beverages', color: Color(0xFF5D8A5E), stock: 30),
-  const Product(id: 'b4', name: 'Orange Juice', price: 80, categoryId: 'beverages', color: Color(0xFFE8821A), stock: 25),
-  const Product(id: 'b5', name: 'Mineral Water', price: 25, categoryId: 'beverages', color: Color(0xFF78C1D4), stock: 100),
-  const Product(id: 'b6', name: 'Lemonade', price: 70, categoryId: 'beverages', color: Color(0xFFD4C026), stock: 20),
-  const Product(id: 'f1', name: 'Chicken Sandwich', price: 120, categoryId: 'food', color: Color(0xFFD4A056), stock: 15),
-  const Product(id: 'f2', name: 'Cheeseburger', price: 150, categoryId: 'food', color: Color(0xFFBE4B26), stock: 10),
-  const Product(id: 'f3', name: 'Pepperoni Pizza', price: 180, categoryId: 'food', color: Color(0xFFCC3A3A), stock: 8),
-  const Product(id: 'f4', name: 'Caesar Salad', price: 110, categoryId: 'food', color: Color(0xFF6FAE6F), stock: 12),
-  const Product(id: 'f5', name: 'Pasta Carbonara', price: 160, categoryId: 'food', color: Color(0xFFD4BE8A), stock: 9),
-  const Product(id: 'f6', name: 'Fish & Chips', price: 145, categoryId: 'food', color: Color(0xFFD4A826), stock: 11),
-  const Product(id: 's1', name: 'Potato Chips', price: 45, categoryId: 'snacks', color: Color(0xFFD4B44A), stock: 60),
-  const Product(id: 's2', name: 'Choco Cookie', price: 55, categoryId: 'snacks', color: Color(0xFF7B5C3E), stock: 45),
-  const Product(id: 's3', name: 'Blueberry Muffin', price: 65, categoryId: 'snacks', color: Color(0xFF6A5ACD), stock: 20),
-  const Product(id: 's4', name: 'Pretzel', price: 50, categoryId: 'snacks', color: Color(0xFFC4924A), stock: 30),
-  const Product(id: 'd1', name: 'Ice Cream', price: 75, categoryId: 'desserts', color: Color(0xFFE8A0C0), stock: 35),
-  const Product(id: 'd2', name: 'Chocolate Cake', price: 95, categoryId: 'desserts', color: Color(0xFF5C3D2E), stock: 15),
-  const Product(id: 'd3', name: 'Brownie', price: 85, categoryId: 'desserts', color: Color(0xFF4A2F1A), stock: 22),
-  const Product(id: 'd4', name: 'Cheesecake', price: 110, categoryId: 'desserts', color: Color(0xFFE8D5A0), stock: 10),
-];
-
+/// Branch-scoped product catalog and stock, backed by [CatalogRepository]
+/// (Drift). Reactively re-subscribes whenever the active branch changes.
 class ProductsNotifier extends StateNotifier<List<Product>> {
-  ProductsNotifier() : super(_initialProducts);
+  ProductsNotifier(this._repository, {required this.branchId}) : super(const []) {
+    _subscription = _repository.watchBranchProducts(branchId).listen((rows) {
+      state = rows.map(_toProduct).toList(growable: false);
+    });
+  }
+
+  final CatalogRepository _repository;
+  final String branchId;
+  late final StreamSubscription<List<CatalogProduct>> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
 
   void toggleAvailability(String id) {
-    state = state.map((p) {
-      return p.id == id ? p.copyWith(isAvailable: !p.isAvailable) : p;
-    }).toList();
+    final current = state.where((p) => p.id == id).firstOrNull;
+    if (current == null) return;
+    _repository.setAvailability(id, !current.isAvailable);
   }
 
   void updateStock(String id, int stock) {
-    state = state.map((p) {
-      return p.id == id ? p.copyWith(stock: stock.clamp(0, 9999)) : p;
-    }).toList();
+    _repository.adjustStock(
+      branchId: branchId,
+      productId: id,
+      stock: stock.clamp(0, 9999),
+    );
   }
 
   void addProduct(Product product) {
-    state = [...state, product];
+    _repository.createProduct(
+      branchId: branchId,
+      name: product.name,
+      unitPriceCentavos: (product.price * 100).round(),
+      categoryId: product.categoryId,
+      colorArgb: product.color.toARGB32(),
+      stock: product.stock,
+    );
   }
 
   void updateProduct(Product updated) {
-    state = state.map((p) => p.id == updated.id ? updated : p).toList();
+    _repository.updateProduct(
+      productId: updated.id,
+      branchId: branchId,
+      name: updated.name,
+      unitPriceCentavos: (updated.price * 100).round(),
+      categoryId: updated.categoryId,
+      colorArgb: updated.color.toARGB32(),
+      stock: updated.stock,
+      isAvailable: updated.isAvailable,
+    );
   }
 
   void deleteProduct(String id) {
-    state = state.where((p) => p.id != id).toList();
-  }
-
-  void decrementStock(String id, int qty) {
-    state = state.map((p) {
-      if (p.id == id) {
-        return p.copyWith(stock: (p.stock - qty).clamp(0, 9999));
-      }
-      return p;
-    }).toList();
+    _repository.deleteProduct(branchId: branchId, productId: id);
   }
 }
 
-final productsProvider =
-    StateNotifierProvider<ProductsNotifier, List<Product>>(
-  (ref) => ProductsNotifier(),
+Product _toProduct(CatalogProduct row) => Product(
+      id: row.product.id,
+      name: row.product.name,
+      price: row.product.unitPriceCentavos / 100,
+      categoryId: row.product.categoryId,
+      color: Color(row.product.colorArgb),
+      stock: row.inventory.stockOnHand,
+      isAvailable: row.product.isActive,
+    );
+
+final localPosStoreProvider = Provider<LocalPosStore>(
+  (ref) => MemoryPosStore(),
+);
+
+class ActiveBranchNotifier extends StateNotifier<String> {
+  ActiveBranchNotifier(this._store) : super('MAIN') {
+    restored = _restore();
+  }
+
+  static const storageKey = 'xantara.active-branch.v1';
+  final LocalPosStore _store;
+  late final Future<void> restored;
+
+  Future<void> _restore() async {
+    final saved = await _store.read(storageKey);
+    if (saved != null && retailBranches.any((branch) => branch.code == saved)) {
+      state = saved;
+    }
+  }
+
+  Future<void> select(String branchCode) async {
+    if (!retailBranches.any((branch) => branch.code == branchCode)) {
+      throw ArgumentError.value(branchCode, 'branchCode');
+    }
+    state = branchCode;
+    await _store.write(storageKey, branchCode);
+  }
+}
+
+final activeBranchProvider =
+    StateNotifierProvider<ActiveBranchNotifier, String>(
+  (ref) => ActiveBranchNotifier(ref.watch(localPosStoreProvider)),
+);
+
+final productsProvider = StateNotifierProvider<ProductsNotifier, List<Product>>(
+  (ref) => ProductsNotifier(
+    ref.watch(catalogRepositoryProvider),
+    branchId: branchIdForCode(ref.watch(activeBranchProvider)),
+  ),
 );
 
 final selectedCategoryProvider = StateProvider<String>((ref) => 'all');

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../features/auth/models/user_model.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/splash/screens/splash_screen.dart';
@@ -10,6 +11,7 @@ import '../../features/inventory/screens/inventory_screen.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/cashier/screens/cashier_dashboard_screen.dart';
 import '../../features/orders/screens/orders_screen.dart';
+import '../../features/readiness/screens/improvements_lab_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -24,7 +26,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return loc == '/login' ? null : '/login';
       }
 
-      final isAdmin = auth.user?.role == 'admin';
+      final isAdmin = isAdminRole(auth.user?.role);
 
       // Redirect away from login if already authenticated
       if (loc == '/login') return isAdmin ? '/admin' : '/cashier';
@@ -67,6 +69,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/improvements',
+        builder: (context, state) => const ImprovementsLabScreen(),
       ),
     ],
   );
