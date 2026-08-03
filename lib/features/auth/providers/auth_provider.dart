@@ -1,23 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../local/database_providers.dart';
+import '../../../local/repositories/staff_auth_repository.dart';
 import '../models/user_model.dart';
-
-// Static users for testing
-const _staticUsers = [
-  {
-    'id': '1',
-    'name': 'Admin User',
-    'email': 'admin@xantara.com',
-    'password': 'admin123',
-    'role': 'admin',
-  },
-  {
-    'id': '2',
-    'name': 'Cashier One',
-    'email': 'cashier@xantara.com',
-    'password': 'cashier123',
-    'role': 'cashier',
-  },
-];
 
 class AuthState {
   final UserModel? user;
@@ -46,36 +30,40 @@ class AuthState {
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(const AuthState());
+  AuthNotifier(this._repository) : super(const AuthState());
+
+  final StaffAuthRepository _repository;
 
   Future<bool> login(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 1));
-
-    final match = _staticUsers.where(
-      (u) => u['email'] == email.trim() && u['password'] == password,
-    );
-
-    if (match.isEmpty) {
+    try {
+      final principal = await _repository.authenticate(
+        email: email,
+        password: password,
+        now: DateTime.now(),
+      );
+      state = AuthState(
+        user: UserModel(
+          id: principal.id,
+          name: principal.displayName,
+          email: principal.email,
+          role: principal.role.name,
+          branchIds: principal.branchIds,
+        ),
+      );
+      return true;
+    } on AuthenticationLockedException catch (error) {
+      final minutes = error.lockedUntil.difference(DateTime.now()).inMinutes;
       state = state.copyWith(
         isLoading: false,
-        error: 'Invalid email or password.',
+        error: 'Too many attempts. Try again in ${minutes.clamp(1, 999)} min.',
       );
       return false;
+    } on AuthenticationException catch (error) {
+      state = state.copyWith(isLoading: false, error: error.message);
+      return false;
     }
-
-    final u = match.first;
-    state = AuthState(
-      user: UserModel(
-        id: u['id']!,
-        name: u['name']!,
-        email: u['email']!,
-        role: u['role']!,
-      ),
-    );
-    return true;
   }
 
   void logout() {
@@ -84,5 +72,5 @@ class AuthNotifier extends StateNotifier<AuthState> {
 }
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref.watch(staffAuthRepositoryProvider)),
 );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../pos/providers/pos_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/widgets/bottom_tab_bar.dart';
 
 class InventoryScreen extends ConsumerWidget {
@@ -10,6 +11,7 @@ class InventoryScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final branch = retailBranchFor(ref.watch(activeBranchProvider));
     return Scaffold(
       backgroundColor: AppColors.gray50,
       bottomNavigationBar: const BottomTabBar(currentIndex: 2),
@@ -18,13 +20,12 @@ class InventoryScreen extends ConsumerWidget {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
-        title: const Text(
-          'Inventory',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: AppColors.gray800,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Inventory', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+            Text(branch.name, style: AppTextStyles.caption),
+          ],
         ),
       ),
       body: ListView(
@@ -67,12 +68,7 @@ class _SectionCard extends StatelessWidget {
               const SizedBox(width: AppSizes.xs),
               Text(
                 title.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                  letterSpacing: 1.2,
-                ),
+                style: AppTextStyles.labelCaps.copyWith(color: AppColors.primary),
               ),
               const Spacer(),
               if (trailing != null) trailing!,
@@ -116,9 +112,7 @@ class _StockSection extends ConsumerWidget {
             _StockTile(product: e.value),
             if (e.key < products.length - 1)
               const Divider(
-                  height: 1,
-                  color: AppColors.gray100,
-                  indent: AppSizes.lg),
+                  height: 1, color: AppColors.gray100, indent: AppSizes.lg),
           ],
         );
       }).toList(),
@@ -147,32 +141,24 @@ class _StockTile extends ConsumerWidget {
             size: 18, color: product.color),
       ),
       title: Text(product.name,
-          style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              color: AppColors.gray800)),
+          style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600)),
       subtitle: isLow
-          ? const Text('Low stock!',
-              style:
-                  TextStyle(color: AppColors.error, fontSize: 12))
+          ? Text('Low stock!',
+              style: AppTextStyles.bodySm.copyWith(color: AppColors.error))
           : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
             onTap: product.stock > 0
-                ? () => notifier.updateStock(
-                    product.id, product.stock - 1)
+                ? () => notifier.updateStock(product.id, product.stock - 1)
                 : null,
             child: Container(
               width: 30,
               height: 30,
               decoration: BoxDecoration(
-                color: product.stock > 0
-                    ? AppColors.gray100
-                    : AppColors.gray50,
-                borderRadius:
-                    BorderRadius.circular(AppSizes.rBadgeSm),
+                color: product.stock > 0 ? AppColors.gray100 : AppColors.gray50,
+                borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
               ),
               child: Icon(Icons.remove,
                   size: 16,
@@ -186,27 +172,22 @@ class _StockTile extends ConsumerWidget {
             child: Text(
               '${product.stock}',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
+              style: AppTextStyles.titleSm.copyWith(
                 fontSize: 14,
-                color:
-                    isLow ? AppColors.error : AppColors.gray800,
+                color: isLow ? AppColors.error : AppColors.gray800,
               ),
             ),
           ),
           GestureDetector(
-            onTap: () =>
-                notifier.updateStock(product.id, product.stock + 1),
+            onTap: () => notifier.updateStock(product.id, product.stock + 1),
             child: Container(
               width: 30,
               height: 30,
               decoration: BoxDecoration(
                 color: AppColors.primaryLight,
-                borderRadius:
-                    BorderRadius.circular(AppSizes.rBadgeSm),
+                borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
               ),
-              child: const Icon(Icons.add,
-                  size: 16, color: AppColors.primary),
+              child: const Icon(Icons.add, size: 16, color: AppColors.primary),
             ),
           ),
         ],
@@ -245,22 +226,20 @@ class _ItemsSection extends ConsumerWidget {
       trailing: GestureDetector(
         onTap: () => _showItemDialog(context, ref, null),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSizes.sm, vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppSizes.sm, vertical: 4),
           decoration: BoxDecoration(
             color: AppColors.primaryLight,
             borderRadius: BorderRadius.circular(AppSizes.rPill),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add, size: 14, color: AppColors.primary),
-              SizedBox(width: 4),
+              const Icon(Icons.add, size: 14, color: AppColors.primary),
+              const SizedBox(width: 4),
               Text('Add',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary)),
+                  style: AppTextStyles.labelMd
+                      .copyWith(fontSize: 12, color: AppColors.primary)),
             ],
           ),
         ),
@@ -274,17 +253,14 @@ class _ItemsSection extends ConsumerWidget {
             ),
             if (e.key < products.length - 1)
               const Divider(
-                  height: 1,
-                  color: AppColors.gray100,
-                  indent: AppSizes.lg),
+                  height: 1, color: AppColors.gray100, indent: AppSizes.lg),
           ],
         );
       }).toList(),
     );
   }
 
-  void _showItemDialog(
-      BuildContext context, WidgetRef ref, Product? existing) {
+  void _showItemDialog(BuildContext context, WidgetRef ref, Product? existing) {
     showDialog(
       context: context,
       builder: (_) => _ItemDialog(existing: existing, ref: ref),
@@ -293,8 +269,7 @@ class _ItemsSection extends ConsumerWidget {
 }
 
 class _ItemControlTile extends ConsumerWidget {
-  const _ItemControlTile(
-      {required this.product, required this.onEdit});
+  const _ItemControlTile({required this.product, required this.onEdit});
   final Product product;
   final VoidCallback onEdit;
 
@@ -314,24 +289,18 @@ class _ItemControlTile extends ConsumerWidget {
             size: 18, color: product.color),
       ),
       title: Text(product.name,
-          style: TextStyle(
+          style: AppTextStyles.bodyMd.copyWith(
             fontWeight: FontWeight.w600,
-            fontSize: 13,
-            color: AppColors.gray800,
-            decoration: product.isAvailable
-                ? null
-                : TextDecoration.lineThrough,
+            decoration: product.isAvailable ? null : TextDecoration.lineThrough,
           )),
       subtitle: Text('₱${product.price.toStringAsFixed(2)}',
-          style: const TextStyle(
-              fontSize: 11, color: AppColors.gray400)),
+          style: AppTextStyles.caption),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Switch(
             value: product.isAvailable,
-            onChanged: (_) =>
-                notifier.toggleAvailability(product.id),
+            onChanged: (_) => notifier.toggleAvailability(product.id),
           ),
           IconButton(
             icon: const Icon(Icons.edit_outlined,
@@ -354,11 +323,9 @@ class _ItemControlTile extends ConsumerWidget {
       builder: (_) => AlertDialog(
         title: const Text('Delete Item'),
         shape: RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(AppSizes.rCardLg)),
+            borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
         content: Text('Remove "${product.name}" from the menu?',
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.gray600)),
+            style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -366,17 +333,14 @@ class _ItemControlTile extends ConsumerWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              ref
-                  .read(productsProvider.notifier)
-                  .deleteProduct(product.id);
+              ref.read(productsProvider.notifier).deleteProduct(product.id);
               Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppSizes.rButton)),
+                  borderRadius: BorderRadius.circular(AppSizes.rButton)),
             ),
             child: const Text('Delete'),
           ),
@@ -422,9 +386,15 @@ class _ItemDialogState extends State<_ItemDialog> {
   final _formKey = GlobalKey<FormState>();
 
   static const _colorOptions = [
-    Color(0xFF6F4E37), Color(0xFF4A90D9), Color(0xFF5D8A5E),
-    Color(0xFFE8821A), Color(0xFF78C1D4), Color(0xFFCC3A3A),
-    Color(0xFF6A5ACD), Color(0xFFD4A056), Color(0xFFE8A0C0),
+    Color(0xFF6F4E37),
+    Color(0xFF4A90D9),
+    Color(0xFF5D8A5E),
+    Color(0xFFE8821A),
+    Color(0xFF78C1D4),
+    Color(0xFFCC3A3A),
+    Color(0xFF6A5ACD),
+    Color(0xFFD4A056),
+    Color(0xFFE8A0C0),
   ];
 
   @override
@@ -434,8 +404,7 @@ class _ItemDialogState extends State<_ItemDialog> {
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _priceCtrl = TextEditingController(
         text: p != null ? p.price.toStringAsFixed(2) : '');
-    _stockCtrl =
-        TextEditingController(text: p != null ? '${p.stock}' : '0');
+    _stockCtrl = TextEditingController(text: p != null ? '${p.stock}' : '0');
     _categoryId = p?.categoryId ?? 'beverages';
     _color = p?.color ?? _colorOptions.first;
   }
@@ -475,10 +444,8 @@ class _ItemDialogState extends State<_ItemDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(
-          widget.existing != null ? 'Edit Item' : 'Add Item',
-          style: const TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 16)),
+      title: Text(widget.existing != null ? 'Edit Item' : 'Add Item',
+          style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
       content: SingleChildScrollView(
@@ -492,8 +459,7 @@ class _ItemDialogState extends State<_ItemDialog> {
                 controller: _nameCtrl,
                 decoration: const InputDecoration(
                     labelText: 'Name', border: OutlineInputBorder()),
-                validator: (v) =>
-                    v == null || v.isEmpty ? 'Required' : null,
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: AppSizes.md),
               Row(
@@ -503,12 +469,9 @@ class _ItemDialogState extends State<_ItemDialog> {
                       controller: _priceCtrl,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Price (₱)',
-                          border: OutlineInputBorder()),
+                          labelText: 'Price (₱)', border: OutlineInputBorder()),
                       validator: (v) =>
-                          double.tryParse(v ?? '') == null
-                              ? 'Invalid'
-                              : null,
+                          double.tryParse(v ?? '') == null ? 'Invalid' : null,
                     ),
                   ),
                   const SizedBox(width: AppSizes.md),
@@ -517,12 +480,9 @@ class _ItemDialogState extends State<_ItemDialog> {
                       controller: _stockCtrl,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                          labelText: 'Stock',
-                          border: OutlineInputBorder()),
+                          labelText: 'Stock', border: OutlineInputBorder()),
                       validator: (v) =>
-                          int.tryParse(v ?? '') == null
-                              ? 'Invalid'
-                              : null,
+                          int.tryParse(v ?? '') == null ? 'Invalid' : null,
                     ),
                   ),
                 ],
@@ -531,8 +491,7 @@ class _ItemDialogState extends State<_ItemDialog> {
               DropdownButtonFormField<String>(
                 initialValue: _categoryId,
                 decoration: const InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder()),
+                    labelText: 'Category', border: OutlineInputBorder()),
                 items: staticCategories
                     .where((c) => c.id != 'all')
                     .map((c) => DropdownMenuItem(
@@ -543,9 +502,8 @@ class _ItemDialogState extends State<_ItemDialog> {
                 onChanged: (v) => setState(() => _categoryId = v!),
               ),
               const SizedBox(height: AppSizes.md),
-              const Text('Color',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.gray600)),
+              Text('Color',
+                  style: AppTextStyles.bodySm.copyWith(color: AppColors.gray600)),
               const SizedBox(height: AppSizes.sm),
               Wrap(
                 spacing: AppSizes.sm,
@@ -560,14 +518,12 @@ class _ItemDialogState extends State<_ItemDialog> {
                         color: c,
                         shape: BoxShape.circle,
                         border: selected
-                            ? Border.all(
-                                color: Colors.white, width: 2)
+                            ? Border.all(color: Colors.white, width: 2)
                             : null,
                         boxShadow: selected
                             ? [
                                 BoxShadow(
-                                    color:
-                                        c.withValues(alpha: 0.6),
+                                    color: c.withValues(alpha: 0.6),
                                     blurRadius: 6)
                               ]
                             : null,
@@ -595,11 +551,9 @@ class _ItemDialogState extends State<_ItemDialog> {
             backgroundColor: AppColors.primary,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppSizes.rButton)),
+                borderRadius: BorderRadius.circular(AppSizes.rButton)),
           ),
-          child:
-              Text(widget.existing != null ? 'Save' : 'Add'),
+          child: Text(widget.existing != null ? 'Save' : 'Add'),
         ),
       ],
     );

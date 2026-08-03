@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_text_styles.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -39,8 +41,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       final auth = ref.read(authProvider);
       if (!auth.isAuthenticated) {
         context.go('/login');
-      } else if (auth.user?.role == 'admin') {
-        context.go('/pos');
+      } else if (isAdminRole(auth.user?.role)) {
+        context.go('/admin');
       } else {
         context.go('/cashier');
       }
@@ -103,22 +105,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           ),
                         ),
                         const SizedBox(height: 24),
-                        const Text(
+                        Text(
                           'Xantara POS',
-                          style: TextStyle(
+                          style: AppTextStyles.displayMd.copyWith(
                             color: Colors.white,
                             fontSize: 26,
-                            fontWeight: FontWeight.w700,
                             letterSpacing: -0.5,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           'Point of Sale System',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 12,
-                          ),
+                          style: AppTextStyles.bodySm
+                              .copyWith(color: Colors.white.withValues(alpha: 0.6)),
                         ),
                       ],
                     ),
@@ -148,10 +147,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     const SizedBox(height: 12),
                     Text(
                       'Powered by Xantara',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
-                        fontSize: 11,
-                      ),
+                      style: AppTextStyles.caption
+                          .copyWith(color: Colors.white.withValues(alpha: 0.45)),
                     ),
                   ],
                 ),

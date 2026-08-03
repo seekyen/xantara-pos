@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/cart_provider.dart';
-import '../../../features/orders/providers/orders_provider.dart';
+import '../providers/pos_provider.dart';
+import '../../../core/auth/pos_authorization.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
+import '../../../local/database_seed.dart';
+import '../../../shared/widgets/supervisor_authorization_dialog.dart';
 
 class CartPanel extends ConsumerWidget {
   const CartPanel({super.key, this.onCheckout});
@@ -37,14 +41,10 @@ class CartPanel extends ConsumerWidget {
                 const Icon(Icons.receipt_long_rounded,
                     color: Colors.white, size: 18),
                 const SizedBox(width: AppSizes.sm),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Current Order',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
+                    style: AppTextStyles.titleMd.copyWith(color: Colors.white),
                   ),
                 ),
                 if (cartItems.isNotEmpty)
@@ -66,13 +66,9 @@ class CartPanel extends ConsumerWidget {
                         borderRadius:
                             BorderRadius.circular(AppSizes.rPill),
                       ),
-                      child: const Text(
+                      child: Text(
                         'Clear',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: AppTextStyles.labelMd.copyWith(color: Colors.white),
                       ),
                     ),
                   ),
@@ -99,15 +95,13 @@ class CartPanel extends ConsumerWidget {
                               color: AppColors.primary, size: 20),
                         ),
                         const SizedBox(height: AppSizes.md),
-                        const Text('No items yet',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.gray800)),
+                        Text('No items yet',
+                            style: AppTextStyles.bodyMd
+                                .copyWith(fontWeight: FontWeight.w600)),
                         const SizedBox(height: 4),
-                        const Text('Tap a product to add',
-                            style: TextStyle(
-                                fontSize: 11, color: AppColors.gray400)),
+                        Text('Tap a product to add',
+                            style: AppTextStyles.bodySm
+                                .copyWith(fontSize: 11, color: AppColors.gray400)),
                       ],
                     ),
                   )
@@ -140,111 +134,16 @@ void _showVoidDialog({
   required String message,
   required VoidCallback onConfirmed,
 }) {
-  showDialog(
-    context: context,
-    builder: (_) => _VoidPermissionDialog(
-      title: title,
-      message: message,
-      onConfirmed: onConfirmed,
-    ),
-  );
-}
-
-class _VoidPermissionDialog extends StatefulWidget {
-  const _VoidPermissionDialog({
-    required this.title,
-    required this.message,
-    required this.onConfirmed,
+  final branchId = branchIdForCode(ref.read(activeBranchProvider));
+  showSupervisorAuthorizationDialog(
+    context,
+    title: title,
+    message: message,
+    permission: PosPermission.voidInvoice,
+    branchId: branchId,
+  ).then((supervisor) {
+    if (supervisor != null) onConfirmed();
   });
-  final String title;
-  final String message;
-  final VoidCallback onConfirmed;
-
-  @override
-  State<_VoidPermissionDialog> createState() =>
-      _VoidPermissionDialogState();
-}
-
-class _VoidPermissionDialogState extends State<_VoidPermissionDialog> {
-  final _controller = TextEditingController();
-  bool _obscure = true;
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _confirm() {
-    if (_controller.text != voidPermissionCode) {
-      setState(() => _error = 'Incorrect code. Try again.');
-      return;
-    }
-    Navigator.pop(context);
-    widget.onConfirmed();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          const Icon(Icons.lock_outline, color: AppColors.error, size: 20),
-          const SizedBox(width: AppSizes.sm),
-          Text(widget.title),
-        ],
-      ),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(widget.message,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.gray600)),
-          const SizedBox(height: AppSizes.lg),
-          TextField(
-            controller: _controller,
-            obscureText: _obscure,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Supervisor Code',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
-              errorText: _error,
-              suffixIcon: IconButton(
-                icon: Icon(_obscure
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
-                onPressed: () => setState(() => _obscure = !_obscure),
-              ),
-            ),
-            onChanged: (_) => setState(() => _error = null),
-            onSubmitted: (_) => _confirm(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _confirm,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.error,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppSizes.rButton)),
-          ),
-          child: const Text('Confirm'),
-        ),
-      ],
-    );
-  }
 }
 
 // ── Cart item tile ────────────────────────────────────────────────────────────
@@ -282,17 +181,14 @@ class _CartItemTile extends ConsumerWidget {
               children: [
                 Text(
                   item.product.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: AppColors.gray800),
+                  style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   '₱${item.product.price.toStringAsFixed(0)} each',
-                  style: const TextStyle(
-                      color: AppColors.gray400, fontSize: 11),
+                  style: AppTextStyles.bodySm
+                      .copyWith(fontSize: 11, color: AppColors.gray400),
                 ),
               ],
             ),
@@ -323,10 +219,7 @@ class _CartItemTile extends ConsumerWidget {
                 child: Text(
                   '${item.quantity}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.gray800),
+                  style: AppTextStyles.titleSm.copyWith(fontSize: 14),
                 ),
               ),
               _QtyButton(
@@ -341,11 +234,8 @@ class _CartItemTile extends ConsumerWidget {
             child: Text(
               '₱${item.subtotal.toStringAsFixed(0)}',
               textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-                color: AppColors.primary,
-              ),
+              style: AppTextStyles.bodyMd
+                  .copyWith(fontWeight: FontWeight.w700, color: AppColors.primary),
             ),
           ),
         ],
@@ -378,16 +268,19 @@ class _QtyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
+    // Tappable area meets AppSizes.minTouch (44px) for comfortable all-day
+    // cashier use on a touchscreen; the visible glyph stays small.
+    return Material(
+      color: AppColors.gray100,
+      borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
+        child: SizedBox(
+          width: AppSizes.minTouch,
+          height: AppSizes.minTouch,
+          child: Icon(icon, size: 16, color: AppColors.gray800),
         ),
-        child: Icon(icon, size: 14, color: AppColors.gray800),
       ),
     );
   }
@@ -413,29 +306,21 @@ class _CartFooter extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Subtotal',
-                  style: TextStyle(
-                      color: AppColors.gray400, fontSize: 13)),
+              Text('Subtotal',
+                  style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray400)),
               Text('₱${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      fontSize: 13, color: AppColors.gray600)),
+                  style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
             ],
           ),
           const SizedBox(height: AppSizes.xs),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                      color: AppColors.gray800)),
+              const Text('Total', style: AppTextStyles.titleMd),
               Text(
                 '₱${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18,
-                    color: AppColors.primary),
+                style: AppTextStyles.titleLg
+                    .copyWith(fontSize: 18, color: AppColors.primary),
               ),
             ],
           ),
@@ -449,8 +334,7 @@ class _CartFooter extends StatelessWidget {
                 icon: const Icon(Icons.payments_outlined, size: 18),
                 label: Text(
                   'Charge  ₱${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700),
+                  style: AppTextStyles.titleMd.copyWith(color: Colors.white),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,

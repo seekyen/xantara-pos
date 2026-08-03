@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../providers/pos_provider.dart';
 import '../providers/cart_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/widgets/stock_badge.dart';
 
 class ProductGrid extends ConsumerStatefulWidget {
@@ -62,8 +62,7 @@ class _ProductGridState extends ConsumerState<ProductGrid> {
             onChanged: (v) => setState(() => _search = v),
             decoration: InputDecoration(
               hintText: 'Search or scan barcode…',
-              hintStyle: const TextStyle(
-                  color: AppColors.gray400, fontSize: 13),
+              hintStyle: AppTextStyles.bodyMd.copyWith(color: AppColors.gray400),
               prefixIcon: const Icon(Icons.search,
                   size: 18, color: AppColors.gray400),
               suffixIcon: _search.isNotEmpty
@@ -116,11 +115,9 @@ class _ProductGridState extends ConsumerState<ProductGrid> {
                               color: AppColors.primary, size: 20),
                         ),
                         const SizedBox(height: AppSizes.md),
-                        const Text('No products found',
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.gray800)),
+                        Text('No products found',
+                            style: AppTextStyles.bodyMd
+                                .copyWith(fontWeight: FontWeight.w600)),
                       ],
                     ),
                   )
@@ -177,7 +174,7 @@ class _ProductCard extends ConsumerWidget {
                   color: Colors.white, size: 16),
               const SizedBox(width: AppSizes.sm),
               Text('Low stock: only $_remaining left',
-                  style: const TextStyle(fontSize: 13)),
+                  style: AppTextStyles.bodyMd.copyWith(color: Colors.white)),
             ],
           ),
           backgroundColor: AppColors.warning,
@@ -255,7 +252,7 @@ class _ProductCard extends ConsumerWidget {
                       children: [
                         Text(
                           product.name,
-                          style: TextStyle(
+                          style: AppTextStyles.bodySm.copyWith(
                             fontWeight: FontWeight.w600,
                             fontSize: 11,
                             color: _isOutOfStock
@@ -268,10 +265,8 @@ class _ProductCard extends ConsumerWidget {
                         const SizedBox(height: 2),
                         Text(
                           skuCode,
-                          style: GoogleFonts.dmMono(
-                            fontSize: 9,
-                            color: AppColors.gray400,
-                          ),
+                          style: AppTextStyles.monoSm
+                              .copyWith(fontSize: 9, color: AppColors.gray400),
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -280,8 +275,7 @@ class _ProductCard extends ConsumerWidget {
                           children: [
                             Text(
                               '₱${product.price.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontSize: 13,
+                              style: AppTextStyles.bodyMd.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: _isOutOfStock
                                     ? AppColors.gray400
@@ -336,11 +330,10 @@ class _ProductCard extends ConsumerWidget {
                     child: Center(
                       child: Text(
                         '$qty',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppTextStyles.labelSm.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white),
                       ),
                     ),
                   ),

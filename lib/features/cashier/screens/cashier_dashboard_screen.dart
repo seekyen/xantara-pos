@@ -7,6 +7,7 @@ import '../../pos/providers/cart_provider.dart';
 import '../providers/shift_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/widgets/offline_banner.dart';
 
 class CashierDashboardScreen extends ConsumerWidget {
@@ -77,28 +78,21 @@ class CashierDashboardScreen extends ConsumerWidget {
                         children: [
                           Text(
                             greeting,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 13,
-                            ),
+                            style: AppTextStyles.bodyMd.copyWith(
+                                color: Colors.white.withValues(alpha: 0.7)),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             user?.name ?? 'Cashier',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: AppTextStyles.displayMd
+                                .copyWith(color: Colors.white),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             DateFormat('EEEE, MMMM d, yyyy')
                                 .format(DateTime.now()),
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              fontSize: 12,
-                            ),
+                            style: AppTextStyles.bodySm.copyWith(
+                                color: Colors.white.withValues(alpha: 0.6)),
                           ),
                         ],
                       ),
@@ -155,15 +149,7 @@ class CashierDashboardScreen extends ConsumerWidget {
                         ],
 
                         // ── Quick actions label ─────────────────────────
-                        const Text(
-                          'QUICK ACTIONS',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.2,
-                            color: AppColors.gray400,
-                          ),
-                        ),
+                        const Text('QUICK ACTIONS', style: AppTextStyles.labelCaps),
                         const SizedBox(height: AppSizes.sm),
 
                         _ActionButton(
@@ -252,12 +238,7 @@ class _ShiftCard extends ConsumerWidget {
                 const SizedBox(width: 5),
                 Text(
                   shift.isClockedIn ? 'ON SHIFT' : 'OFF SHIFT',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
-                  ),
+                  style: AppTextStyles.labelCaps.copyWith(color: Colors.white),
                 ),
               ],
             ),
@@ -266,39 +247,29 @@ class _ShiftCard extends ConsumerWidget {
 
           if (shift.isClockedIn && shift.clockInTime != null) ...[
             Text('Clocked in at',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    fontSize: 12)),
+                style: AppTextStyles.bodySm
+                    .copyWith(color: Colors.white.withValues(alpha: 0.7))),
             const SizedBox(height: 2),
             Text(
               DateFormat('hh:mm a').format(shift.clockInTime!),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTextStyles.displayLg.copyWith(color: Colors.white),
             ),
             Text(
               'Duration: ${shift.formattedDuration}',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 12),
+              style: AppTextStyles.bodySm
+                  .copyWith(color: Colors.white.withValues(alpha: 0.7)),
             ),
           ] else ...[
-            const Text(
+            Text(
               'You are not clocked in',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTextStyles.titleLg
+                  .copyWith(fontWeight: FontWeight.w600, color: Colors.white),
             ),
             const SizedBox(height: 2),
             Text(
               'Clock in to start your shift',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 12),
+              style: AppTextStyles.bodySm
+                  .copyWith(color: Colors.white.withValues(alpha: 0.7)),
             ),
           ],
 
@@ -345,9 +316,7 @@ class _ShiftCard extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Shift Summary',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, fontSize: 14)),
+            Text('Shift Summary', style: AppTextStyles.titleSm.copyWith(fontSize: 14)),
             const SizedBox(height: AppSizes.md),
             _SummaryRow('Orders Processed', '$orders'),
             _SummaryRow('Total Sales',
@@ -355,9 +324,8 @@ class _ShiftCard extends ConsumerWidget {
             _SummaryRow('Duration',
                 ref.read(shiftProvider).formattedDuration),
             const SizedBox(height: AppSizes.md),
-            const Text('Are you sure you want to clock out?',
-                style:
-                    TextStyle(color: AppColors.gray600, fontSize: 13)),
+            Text('Are you sure you want to clock out?',
+                style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
           ],
         ),
         actions: [
@@ -396,10 +364,9 @@ class _SummaryRow extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label,
-                style: const TextStyle(
-                    color: AppColors.gray600, fontSize: 13)),
+                style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
             Text(value,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+                style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
       );
@@ -442,13 +409,10 @@ class _StatCard extends StatelessWidget {
             child: Icon(icon, color: iconColor, size: 16),
           ),
           const SizedBox(height: AppSizes.sm),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700)),
+          Text(value, style: AppTextStyles.titleMd),
           const SizedBox(height: 2),
           Text(label,
-              style: const TextStyle(
-                  fontSize: 10, color: AppColors.gray400)),
+              style: AppTextStyles.caption.copyWith(fontSize: 10)),
         ],
       ),
     );
@@ -518,13 +482,10 @@ class _ActionButton extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14)),
+                        style: AppTextStyles.titleSm.copyWith(fontSize: 14)),
                     Text(subtitle,
-                        style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.gray400)),
+                        style: AppTextStyles.bodySm
+                            .copyWith(color: AppColors.gray400)),
                   ],
                 ),
               ),

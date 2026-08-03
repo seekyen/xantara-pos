@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
+import '../../../local/database_seed.dart';
 import '../../../shared/providers/biometric_provider.dart';
+import '../../../shared/widgets/status_banner.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -34,7 +38,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!success || !mounted) return;
 
     final role = ref.read(authProvider).user?.role;
-    final dest = role == 'admin' ? '/admin' : '/cashier';
+    final dest = isAdminRole(role) ? '/admin' : '/cashier';
 
     final isAvailable = ref.read(biometricAvailableProvider).value ?? false;
     final isEnabled = ref.read(biometricEnabledProvider);
@@ -58,7 +62,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .login(creds.email, creds.password);
     if (success && mounted) {
       final role = ref.read(authProvider).user?.role;
-      context.go(role == 'admin' ? '/admin' : '/cashier');
+      context.go(isAdminRole(role) ? '/admin' : '/cashier');
     }
   }
 
@@ -75,14 +79,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           children: [
             Icon(Icons.fingerprint, color: AppColors.primary, size: 22),
             SizedBox(width: AppSizes.sm),
-            Text('Quick Sign-In',
-                style:
-                    TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Text('Quick Sign-In', style: AppTextStyles.titleMd),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Use fingerprint or face ID to sign in faster next time?',
-          style: TextStyle(fontSize: 13, color: AppColors.gray600),
+          style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600),
         ),
         actions: [
           TextButton(
@@ -164,37 +166,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSizes.lg),
-                  const Text(
-                    'Xantara POS',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.gray800,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
+                  const Text('Xantara POS', style: AppTextStyles.displayMd),
                   const SizedBox(height: AppSizes.xs),
-                  const Text(
+                  Text(
                     'Sign in to your account',
-                    style: TextStyle(fontSize: 13, color: AppColors.gray600),
+                    style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600),
                   ),
-                  const SizedBox(height: AppSizes.xxl),
+                  const SizedBox(height: AppSizes.xl),
 
-                  // Card
-                  Container(
-                    padding: const EdgeInsets.all(AppSizes.xl),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rCardLg),
-                      boxShadow: AppShadows.md,
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const _Label('Email'),
+                  const StatusBanner(
+                    text: 'Training accounts — owner: $seedOwnerEmail / '
+                        '$seedOwnerPassword\ncashier: $seedCashierEmail / '
+                        '$seedCashierPassword',
+                    tone: BannerTone.info,
+                  ),
+                  const SizedBox(height: AppSizes.xl),
+
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const _Label('Email'),
                           const SizedBox(height: AppSizes.xs),
                           TextFormField(
                             controller: _emailCtrl,
@@ -259,9 +252,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   const SizedBox(width: AppSizes.sm),
                                   Expanded(
                                     child: Text(auth.error!,
-                                        style: const TextStyle(
-                                            color: AppColors.error,
-                                            fontSize: 13)),
+                                        style: AppTextStyles.bodyMd
+                                            .copyWith(color: AppColors.error)),
                                   ),
                                 ],
                               ),
@@ -290,51 +282,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           strokeWidth: 2,
                                           color: Colors.white),
                                     )
-                                  : const Text('Sign In',
-                                      style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600)),
+                                  : Text('Sign In',
+                                      style: AppTextStyles.bodyLg.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white)),
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
 
                   if (bioAvailable && bioEnabled) ...[
-                    const SizedBox(height: AppSizes.xl),
-                    GestureDetector(
-                      onTap: auth.isLoading ? null : _loginWithBiometric,
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: const BoxDecoration(
-                              color: AppColors.primaryLight,
-                              shape: BoxShape.circle,
-                              boxShadow: AppShadows.md,
-                            ),
-                            child: const Icon(Icons.fingerprint,
-                                color: AppColors.primary, size: 30),
-                          ),
-                          const SizedBox(height: AppSizes.xs),
-                          const Text(
-                            'Sign in with biometrics',
-                            style: TextStyle(
-                                fontSize: 12, color: AppColors.gray400),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: AppSizes.md),
+                    OutlinedButton.icon(
+                      onPressed: auth.isLoading ? null : _loginWithBiometric,
+                      icon: const Icon(Icons.fingerprint, size: 20),
+                      label: const Text('Use biometric sign-in'),
                     ),
                   ],
 
                   const SizedBox(height: AppSizes.xl),
-                  const Text(
-                    'Powered by Xantara',
-                    style:
-                        TextStyle(color: AppColors.gray400, fontSize: 11),
-                  ),
+                  const Text('Powered by Xantara', style: AppTextStyles.caption),
                 ],
               ),
             ),
@@ -350,12 +318,6 @@ class _Label extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Text(
-        text,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.gray800,
-        ),
-      );
+  Widget build(BuildContext context) =>
+      Text(text, style: AppTextStyles.labelMd);
 }

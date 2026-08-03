@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/pos_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 
 class CategoryBar extends ConsumerWidget {
   const CategoryBar({super.key});
@@ -48,11 +49,9 @@ class CategoryBar extends ConsumerWidget {
                   const SizedBox(width: AppSizes.xs),
                   Text(
                     cat.name,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w500,
+                    style: AppTextStyles.bodyMd.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
                       color: isSelected ? AppColors.primary : AppColors.gray600,
                     ),
                   ),

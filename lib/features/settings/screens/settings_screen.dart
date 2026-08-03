@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../pos/providers/cart_provider.dart';
 import '../../cashier/providers/shift_provider.dart';
 import '../providers/settings_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
+import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/providers/sync_provider.dart';
 import '../../../shared/providers/biometric_provider.dart';
 
@@ -20,7 +22,7 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isAdmin = ref.watch(authProvider).user?.role == 'admin';
+    final isAdmin = isAdminRole(ref.watch(authProvider).user?.role);
 
     return Scaffold(
       backgroundColor: AppColors.gray50,
@@ -28,11 +30,7 @@ class SettingsScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Settings',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16,
-                color: AppColors.gray800)),
+        title: Text('Settings', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         leading: const BackButton(color: AppColors.gray800),
       ),
       body: ListView(
@@ -75,8 +73,7 @@ class _ProfileCard extends ConsumerWidget {
         .take(2)
         .map((w) => w[0].toUpperCase())
         .join();
-    final roleLabel =
-        user.role == 'admin' ? 'Administrator' : 'Cashier';
+    final roleLabel = roleLabelFor(user.role);
 
     return Container(
       padding: const EdgeInsets.all(AppSizes.lg),
@@ -102,11 +99,8 @@ class _ProfileCard extends ConsumerWidget {
             child: Center(
               child: Text(
                 initials,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AppTextStyles.titleLg
+                    .copyWith(fontSize: 16, color: AppColors.primary),
               ),
             ),
           ),
@@ -115,15 +109,11 @@ class _ProfileCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.name,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: AppColors.gray800)),
+                Text(user.name, style: AppTextStyles.titleMd),
                 const SizedBox(height: 2),
                 Text('$roleLabel · ${user.email}',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.gray400),
+                    style: AppTextStyles.bodySm
+                        .copyWith(color: AppColors.gray400),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ],
@@ -163,15 +153,13 @@ class _SignOutTile extends ConsumerWidget {
                 offset: Offset(0, 1)),
           ],
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
-            SizedBox(width: AppSizes.md),
+            const Icon(Icons.logout_rounded, color: AppColors.error, size: 20),
+            const SizedBox(width: AppSizes.md),
             Text('Sign Out',
-                style: TextStyle(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14)),
+                style: AppTextStyles.labelMd
+                    .copyWith(fontSize: 14, color: AppColors.error)),
           ],
         ),
       ),
@@ -239,9 +227,7 @@ class _StoreSection extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(title,
-            style: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 16)),
+        title: Text(title, style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
         content: TextField(
@@ -281,9 +267,7 @@ class _StoreSection extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Currency',
-            style: TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 16)),
+        title: Text('Currency', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
         content: Column(
@@ -325,7 +309,7 @@ class _NavTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       title: Text(label,
-          style: const TextStyle(
+          style: AppTextStyles.bodyMd.copyWith(
               fontSize: 14,
               fontWeight: FontWeight.w500,
               color: AppColors.primary)),
@@ -333,8 +317,7 @@ class _NavTile extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(value,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.gray400)),
+              style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray400)),
           const SizedBox(width: 2),
           const Icon(Icons.chevron_right,
               size: 16, color: AppColors.gray400),
@@ -411,9 +394,8 @@ class _PreferencesSection extends ConsumerWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.rCardLg),
           ),
-          title: const Text('Enable Biometric Login',
-              style:
-                  TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          title: Text('Enable Biometric Login',
+              style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
           content: TextField(
             controller: ctrl,
             obscureText: obscure,
@@ -477,10 +459,8 @@ class _PrefSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     return SwitchListTile(
       title: Text(label,
-          style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.gray800)),
+          style: AppTextStyles.bodyMd
+              .copyWith(fontSize: 14, fontWeight: FontWeight.w500)),
       value: value,
       onChanged: onChanged,
     );
@@ -529,12 +509,9 @@ class _CloudSyncTile extends ConsumerWidget {
                 color: AppColors.primary, size: 18),
           ),
           const SizedBox(width: AppSizes.md),
-          const Expanded(
+          Expanded(
             child: Text('Cloud sync',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: AppColors.gray800)),
+                style: AppTextStyles.labelMd.copyWith(fontSize: 14)),
           ),
           Container(
             padding: const EdgeInsets.symmetric(
@@ -554,10 +531,8 @@ class _CloudSyncTile extends ConsumerWidget {
                 ),
                 const SizedBox(width: 5),
                 Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: color)),
+                    style: AppTextStyles.labelMd
+                        .copyWith(fontSize: 12, color: color)),
               ],
             ),
           ),
@@ -592,12 +567,7 @@ class _SectionCard extends StatelessWidget {
               const SizedBox(width: AppSizes.xs),
               Text(
                 title.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primary,
-                  letterSpacing: 1.2,
-                ),
+                style: AppTextStyles.labelCaps.copyWith(color: AppColors.primary),
               ),
               const Spacer(),
             ],
@@ -641,15 +611,10 @@ class _AppearanceSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Theme Color',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.gray800)),
+              Text('Theme Color', style: AppTextStyles.labelMd.copyWith(fontSize: 14)),
               const SizedBox(height: 4),
-              const Text('Changes the primary color across the app',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.gray400)),
+              Text('Changes the primary color across the app',
+                  style: AppTextStyles.bodySm.copyWith(color: AppColors.gray400)),
               const SizedBox(height: AppSizes.md),
               Wrap(
                 spacing: AppSizes.sm,
@@ -745,22 +710,17 @@ class _AppVersionTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('App Version',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                        color: AppColors.gray800)),
+                Text('App Version',
+                    style: AppTextStyles.bodyMd
+                        .copyWith(fontWeight: FontWeight.w600)),
                 info.when(
                   data: (i) => Text(
                       'v${i.version} (build ${i.buildNumber})',
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.gray400)),
-                  loading: () => const Text('...',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.gray400)),
-                  error: (_, __) => const Text('N/A',
-                      style: TextStyle(
-                          fontSize: 11, color: AppColors.gray400)),
+                      style: AppTextStyles.caption),
+                  loading: () =>
+                      const Text('...', style: AppTextStyles.caption),
+                  error: (_, __) =>
+                      const Text('N/A', style: AppTextStyles.caption),
                 ),
               ],
             ),

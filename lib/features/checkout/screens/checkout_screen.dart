@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:uuid/uuid.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../pos/providers/cart_provider.dart';
 import '../../pos/providers/pos_provider.dart';
 import '../providers/checkout_provider.dart';
 import '../widgets/receipt_preview.dart';
-import '../../orders/providers/orders_provider.dart';
+import '../../../core/auth/pos_authorization.dart';
+import '../../../core/payments/payment.dart';
+import '../../../local/database_providers.dart';
+import '../../../local/database_seed.dart';
+import '../../../local/repositories/offline_sale_repository.dart';
+import '../../../shared/widgets/supervisor_authorization_dialog.dart';
 import '../../customer_display/customer_display_bridge.dart';
 import '../../customer_display/providers/customer_display_providers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
-
-const _kVat = 0.12;
+import '../../../core/constants/app_text_styles.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -22,14 +28,17 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _onPaymentPage = false;
-  PaymentMethod _selectedMethod = PaymentMethod.card;
+  PaymentMethod _selectedMethod = PaymentMethod.cash;
   final _promoController = TextEditingController();
+  final _paymentReferenceController = TextEditingController();
   double _discount = 0;
   double _tendered = 0;
+  bool _isProcessing = false;
 
   @override
   void dispose() {
     _promoController.dispose();
+    _paymentReferenceController.dispose();
     super.dispose();
   }
 
@@ -52,7 +61,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   bool _canConfirm(double total) {
     if (_selectedMethod == PaymentMethod.cash) return _tendered >= total;
-    return true;
+    return _paymentReferenceController.text.trim().isNotEmpty;
   }
 
   void _showVoidDialog({
@@ -61,54 +70,115 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     required String message,
     required VoidCallback onConfirmed,
   }) {
-    showDialog(
-      context: context,
-      builder: (_) => _VoidPermissionDialog(
-        title: title,
-        message: message,
-        onConfirmed: onConfirmed,
-      ),
-    );
+    final branchId = branchIdForCode(ref.read(activeBranchProvider));
+    showSupervisorAuthorizationDialog(
+      context,
+      title: title,
+      message: message,
+      permission: PosPermission.voidInvoice,
+      branchId: branchId,
+    ).then((supervisor) {
+      if (supervisor != null) onConfirmed();
+    });
   }
 
-  void _confirmPayment(
-      BuildContext context, List<CartItem> cartItems, double total) {
-    final method = _selectedMethod;
-    double? cashReceived;
-    if (method == PaymentMethod.cash) {
-      cashReceived = _tendered > 0 ? _tendered : total;
+  List<OfflineSaleLineRequest> _buildSaleLines(List<CartItem> cartItems) {
+    var remainingDiscount = (_discount * 100).round();
+    return cartItems.map((item) {
+      final unitPriceCentavos = (item.product.price * 100).round();
+      final gross = unitPriceCentavos * item.quantity;
+      final lineDiscount = remainingDiscount.clamp(0, gross);
+      remainingDiscount -= lineDiscount;
+      return OfflineSaleLineRequest(
+        productId: item.product.id,
+        quantity: item.quantity,
+        discountCentavos: lineDiscount,
+      );
+    }).toList(growable: false);
+  }
+
+  Future<void> _confirmPayment(List<CartItem> cartItems, double total) async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+
+    // Only cash is wired to a real payment path today — see
+    // docs/PAYMENT_ARCHITECTURE.md.
+    final cashReceived = _tendered > 0 ? _tendered : total;
+    final totalCentavos = (total * 100).round();
+    final issuedAt = DateTime.now();
+    final branchId = branchIdForCode(ref.read(activeBranchProvider));
+    final terminalId = terminalIdForBranch(branchId);
+    final actor = ref.read(authProvider).user;
+
+    try {
+      if (actor == null) {
+        throw StateError('You must be signed in to complete a sale.');
+      }
+      final payment = await CashPaymentGateway(
+        createEvidenceId: () => const Uuid().v4(),
+      ).capture(PaymentRequest(
+        idempotencyKey: const Uuid().v4(),
+        amountCentavos: totalCentavos,
+        provider: PaymentProvider.cash,
+        requestedAt: issuedAt,
+        cashTenderedCentavos: (cashReceived * 100).round(),
+      ));
+
+      final invoice = await ref.read(offlineSaleRepositoryProvider).issueSale(
+            OfflineSaleRequest(
+              branchId: branchId,
+              terminalId: terminalId,
+              actorId: actor.id,
+              issuedAt: issuedAt,
+              payment: payment,
+              sellerName: trainingMerchantProfile.registeredName,
+              sellerTin: trainingMerchantProfile.tin,
+              sellerAddress: trainingMerchantProfile.registeredAddress,
+              registrationType: trainingMerchantProfile.registrationType,
+              softwareName: trainingMerchantProfile.softwareName,
+              softwareVersion: trainingMerchantProfile.softwareVersion,
+              lines: _buildSaleLines(cartItems),
+            ),
+          );
+      await drainHardwareJobQueue(ref.read(hardwareJobProcessorProvider));
+
+      final order = buildOrder(
+        id: invoice.id,
+        timestamp: issuedAt,
+        cartItems: cartItems,
+        total: total,
+        method: PaymentMethod.cash,
+        cashReceived: cashReceived,
+        birReceipt: birReceiptFromInvoice(invoice),
+        paymentReference: payment.reference,
+      );
+
+      ref.read(lastOrderProvider.notifier).state = order;
+      ref.read(cartProvider.notifier).clear();
+      if (!mounted) return;
+      Navigator.pop(context);
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ReceiptPreview(order: order),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sale was not recorded: $error')),
+      );
     }
-
-    final order = buildOrder(
-      cartItems: cartItems,
-      total: total,
-      method: method,
-      cashReceived: cashReceived,
-    );
-
-    ref.read(lastOrderProvider.notifier).state = order;
-    ref.read(ordersProvider.notifier).addOrder(order);
-
-    final productsNotifier = ref.read(productsProvider.notifier);
-    for (final item in cartItems) {
-      productsNotifier.decrementStock(item.product.id, item.quantity);
-    }
-
-    ref.read(cartProvider.notifier).clear();
-    Navigator.pop(context);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => ReceiptPreview(order: order),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cartItems = ref.watch(cartProvider);
     final subtotal = cartItems.fold(0.0, (s, i) => s + i.subtotal);
-    final vat = subtotal * _kVat;
-    final total = (subtotal + vat - _discount).clamp(0.0, double.infinity);
+    final total = (subtotal - _discount).clamp(0.0, double.infinity);
+    final totalCentavos = (total * 100).round();
+    final vatableCentavos = (totalCentavos * 10000 / 11200).round();
+    final vat = (totalCentavos - vatableCentavos) / 100;
 
     // Sync customer display payment selection back to the cashier screen.
     ref.listen<PaymentMethod?>(
@@ -131,8 +201,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       builder: (_, controller) => Container(
         decoration: const BoxDecoration(
           color: AppColors.gray50,
-          borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppSizes.rPhone)),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppSizes.rPhone)),
         ),
         child: Column(
           children: [
@@ -152,16 +222,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       selectedMethod: _selectedMethod,
                       tendered: _tendered,
                       tenderedOptions: _tenderedOptions(total),
-                      canConfirm: _canConfirm(total),
+                      paymentReferenceController: _paymentReferenceController,
+                      canConfirm: !_isProcessing && _canConfirm(total),
                       onBack: () => setState(() => _onPaymentPage = false),
                       onMethodSelected: (m) => setState(() {
                         _selectedMethod = m;
                         _tendered = 0;
+                        _paymentReferenceController.clear();
                       }),
-                      onTenderedSelected: (t) =>
-                          setState(() => _tendered = t),
-                      onConfirm: () =>
-                          _confirmPayment(context, cartItems, total),
+                      onReferenceChanged: (_) => setState(() {}),
+                      onTenderedSelected: (t) => setState(() => _tendered = t),
+                      onConfirm: () => _confirmPayment(cartItems, total),
                       scrollController: controller,
                     )
                   : _CartPage(
@@ -175,8 +246,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       onProceed: cartItems.isNotEmpty
                           ? () {
                               setState(() => _onPaymentPage = true);
-                              final windowId = ref.read(
-                                  customerDisplayWindowIdProvider);
+                              final windowId =
+                                  ref.read(customerDisplayWindowIdProvider);
                               if (windowId != null) {
                                 CustomerDisplayBridge.sendProceedToPayment(
                                   windowId,
@@ -266,8 +337,8 @@ class _CartPage extends StatelessWidget {
       children: [
         // ── Header ────────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSizes.xs, 0, AppSizes.screenH, 0),
+          padding:
+              const EdgeInsets.fromLTRB(AppSizes.xs, 0, AppSizes.screenH, 0),
           child: Row(
             children: [
               IconButton(
@@ -279,15 +350,10 @@ class _CartPage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Cart',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.gray800)),
+                  const Text('Cart', style: AppTextStyles.titleLg),
                   Text(
                     '${cartItems.length} item${cartItems.length != 1 ? 's' : ''}',
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.gray400),
+                    style: AppTextStyles.caption,
                   ),
                 ],
               ),
@@ -297,8 +363,7 @@ class _CartPage extends StatelessWidget {
                     horizontal: AppSizes.sm, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.successLight,
-                  borderRadius:
-                      BorderRadius.circular(AppSizes.rPill),
+                  borderRadius: BorderRadius.circular(AppSizes.rPill),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -307,15 +372,12 @@ class _CartPage extends StatelessWidget {
                       width: 6,
                       height: 6,
                       decoration: const BoxDecoration(
-                          color: AppColors.success,
-                          shape: BoxShape.circle),
+                          color: AppColors.success, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 4),
-                    const Text('Synced',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.success)),
+                    Text('Synced',
+                        style: AppTextStyles.labelSm
+                            .copyWith(color: AppColors.success)),
                   ],
                 ),
               ),
@@ -329,14 +391,11 @@ class _CartPage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       border: Border.all(color: AppColors.gray200),
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rPill),
+                      borderRadius: BorderRadius.circular(AppSizes.rPill),
                     ),
-                    child: const Text('Clear',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.gray600)),
+                    child: Text('Clear',
+                        style: AppTextStyles.labelMd
+                            .copyWith(color: AppColors.gray600)),
                   ),
                 ),
               ],
@@ -367,22 +426,17 @@ class _CartPage extends StatelessWidget {
                               borderRadius:
                                   BorderRadius.circular(AppSizes.rCard),
                             ),
-                            child: const Icon(
-                                Icons.shopping_cart_outlined,
-                                color: AppColors.primary,
-                                size: 24),
+                            child: const Icon(Icons.shopping_cart_outlined,
+                                color: AppColors.primary, size: 24),
                           ),
                           const SizedBox(height: AppSizes.md),
-                          const Text('Cart is empty',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.gray800)),
+                          Text('Cart is empty',
+                              style: AppTextStyles.labelMd
+                                  .copyWith(fontSize: 14)),
                           const SizedBox(height: 4),
-                          const Text('Add items from the product grid',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.gray400)),
+                          Text('Add items from the product grid',
+                              style: AppTextStyles.bodySm
+                                  .copyWith(color: AppColors.gray400)),
                         ],
                       ),
                     ),
@@ -397,19 +451,14 @@ class _CartPage extends StatelessWidget {
                 const SizedBox(height: AppSizes.lg),
 
                 // ── Discount ─────────────────────────────────────────
-                const Text('DISCOUNT',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: AppColors.gray400)),
+                const Text('DISCOUNT', style: AppTextStyles.labelCaps),
                 const SizedBox(height: AppSizes.sm),
                 TextField(
                   controller: promoController,
                   decoration: InputDecoration(
                     hintText: 'Promo code...',
-                    hintStyle: const TextStyle(
-                        color: AppColors.gray400, fontSize: 13),
+                    hintStyle: AppTextStyles.bodyMd
+                        .copyWith(color: AppColors.gray400),
                     prefixIcon: const Icon(Icons.search_rounded,
                         size: 18, color: AppColors.gray400),
                     filled: true,
@@ -417,20 +466,15 @@ class _CartPage extends StatelessWidget {
                     contentPadding: const EdgeInsets.symmetric(
                         horizontal: AppSizes.lg, vertical: AppSizes.md),
                     border: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rCard),
-                      borderSide:
-                          const BorderSide(color: AppColors.gray200),
+                      borderRadius: BorderRadius.circular(AppSizes.rCard),
+                      borderSide: const BorderSide(color: AppColors.gray200),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rCard),
-                      borderSide:
-                          const BorderSide(color: AppColors.gray200),
+                      borderRadius: BorderRadius.circular(AppSizes.rCard),
+                      borderSide: const BorderSide(color: AppColors.gray200),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rCard),
+                      borderRadius: BorderRadius.circular(AppSizes.rCard),
                       borderSide: const BorderSide(
                           color: AppColors.primary, width: 1.5),
                     ),
@@ -445,15 +489,12 @@ class _CartPage extends StatelessWidget {
                         horizontal: AppSizes.md, vertical: AppSizes.xs),
                     decoration: BoxDecoration(
                       color: AppColors.successLight,
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rPill),
+                      borderRadius: BorderRadius.circular(AppSizes.rPill),
                     ),
                     child: Text(
                       'Promo applied: -₱${discount.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.success),
+                      style: AppTextStyles.labelMd
+                          .copyWith(color: AppColors.success),
                     ),
                   ),
                 ],
@@ -466,41 +507,33 @@ class _CartPage extends StatelessWidget {
                     padding: const EdgeInsets.all(AppSizes.lg),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(AppSizes.rCard),
+                      borderRadius: BorderRadius.circular(AppSizes.rCard),
                       boxShadow: AppShadows.sm,
                     ),
                     child: Column(
                       children: [
-                        _SummaryLine('Subtotal',
-                            '₱${subtotal.toStringAsFixed(2)}'),
+                        _SummaryLine(
+                            'Subtotal', '₱${subtotal.toStringAsFixed(2)}'),
                         const SizedBox(height: 8),
-                        _SummaryLine('VAT (12%)',
-                            '₱${vat.toStringAsFixed(2)}'),
+                        _SummaryLine(
+                            'VAT included (12%)', '₱${vat.toStringAsFixed(2)}'),
                         if (discount > 0) ...[
                           const SizedBox(height: 8),
-                          _SummaryLine('Discount',
-                              '-₱${discount.toStringAsFixed(2)}',
+                          _SummaryLine(
+                              'Discount', '-₱${discount.toStringAsFixed(2)}',
                               valueColor: AppColors.success),
                         ],
                         const SizedBox(height: AppSizes.md),
-                        const Divider(
-                            height: 1, color: AppColors.gray100),
+                        const Divider(height: 1, color: AppColors.gray100),
                         const SizedBox(height: AppSizes.md),
                         Row(
                           children: [
-                            const Text('Total',
-                                style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.gray800)),
+                            const Text('Total', style: AppTextStyles.titleMd),
                             const Spacer(),
                             Text(
                               '₱${total.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary),
+                              style: AppTextStyles.displayMd
+                                  .copyWith(color: AppColors.primary),
                             ),
                           ],
                         ),
@@ -533,12 +566,10 @@ class _CartPage extends StatelessWidget {
                 disabledBackgroundColor: AppColors.gray200,
                 disabledForegroundColor: AppColors.gray400,
                 shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.rButton)),
+                    borderRadius: BorderRadius.circular(AppSizes.rButton)),
               ),
-              child: const Text('Proceed to Payment',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+              child: Text('Proceed to Payment',
+                  style: AppTextStyles.titleMd.copyWith(color: Colors.white)),
             ),
           ),
         ),
@@ -610,25 +641,20 @@ class _CartItemCard extends StatelessWidget {
               children: [
                 Text(
                   item.product.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: AppColors.gray800),
+                  style: AppTextStyles.bodyMd
+                      .copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   _categoryLabel(item.product.categoryId),
-                  style: const TextStyle(
-                      fontSize: 10, color: AppColors.gray400),
+                  style: AppTextStyles.caption.copyWith(fontSize: 10),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   priceLabel,
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary),
+                  style: AppTextStyles.bodyMd.copyWith(
+                      fontWeight: FontWeight.w700, color: AppColors.primary),
                 ),
               ],
             ),
@@ -636,23 +662,16 @@ class _CartItemCard extends StatelessWidget {
           const SizedBox(width: AppSizes.sm),
           Row(
             children: [
-              _QtyButton(
-                  icon: Icons.remove,
-                  onTap: onDecrement,
-                  filled: false),
+              _QtyButton(icon: Icons.remove, onTap: onDecrement, filled: false),
               SizedBox(
                 width: 30,
                 child: Text(
                   '${item.quantity}',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: AppColors.gray800),
+                  style: AppTextStyles.titleSm.copyWith(fontSize: 14),
                 ),
               ),
-              _QtyButton(
-                  icon: Icons.add, onTap: onIncrement, filled: true),
+              _QtyButton(icon: Icons.add, onTap: onIncrement, filled: true),
             ],
           ),
         ],
@@ -680,8 +699,7 @@ class _QtyButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
         ),
         child: Icon(icon,
-            size: 14,
-            color: filled ? Colors.white : AppColors.gray800),
+            size: 14, color: filled ? Colors.white : AppColors.gray800),
       ),
     );
   }
@@ -699,11 +717,9 @@ class _SummaryLine extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: const TextStyle(
-                fontSize: 13, color: AppColors.gray600)),
+            style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
         Text(value,
-            style: TextStyle(
-                fontSize: 13,
+            style: AppTextStyles.bodyMd.copyWith(
                 fontWeight: FontWeight.w600,
                 color: valueColor ?? AppColors.gray800)),
       ],
@@ -719,10 +735,12 @@ class _PaymentPage extends StatelessWidget {
     required this.selectedMethod,
     required this.tendered,
     required this.tenderedOptions,
+    required this.paymentReferenceController,
     required this.canConfirm,
     required this.onBack,
     required this.onMethodSelected,
     required this.onTenderedSelected,
+    required this.onReferenceChanged,
     required this.onConfirm,
     required this.scrollController,
   });
@@ -731,10 +749,12 @@ class _PaymentPage extends StatelessWidget {
   final PaymentMethod selectedMethod;
   final double tendered;
   final List<_TenderedOption> tenderedOptions;
+  final TextEditingController paymentReferenceController;
   final bool canConfirm;
   final VoidCallback onBack;
   final void Function(PaymentMethod) onMethodSelected;
   final void Function(double) onTenderedSelected;
+  final ValueChanged<String> onReferenceChanged;
   final VoidCallback onConfirm;
   final ScrollController scrollController;
 
@@ -746,8 +766,8 @@ class _PaymentPage extends StatelessWidget {
       children: [
         // ── Header ────────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSizes.xs, 0, AppSizes.screenH, 0),
+          padding:
+              const EdgeInsets.fromLTRB(AppSizes.xs, 0, AppSizes.screenH, 0),
           child: Row(
             children: [
               IconButton(
@@ -755,11 +775,7 @@ class _PaymentPage extends StatelessWidget {
                     size: 18, color: AppColors.gray800),
                 onPressed: onBack,
               ),
-              const Text('Payment',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.gray800)),
+              const Text('Payment', style: AppTextStyles.titleLg),
             ],
           ),
         ),
@@ -780,23 +796,19 @@ class _PaymentPage extends StatelessWidget {
                       horizontal: AppSizes.lg, vertical: AppSizes.lg),
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.rCard),
+                    borderRadius: BorderRadius.circular(AppSizes.rCard),
                   ),
                   child: Column(
                     children: [
-                      const Text('Amount Due',
-                          style: TextStyle(
-                              fontSize: 12,
+                      Text('Amount Due',
+                          style: AppTextStyles.bodySm.copyWith(
                               color: AppColors.primary,
                               fontWeight: FontWeight.w500)),
                       const SizedBox(height: 4),
                       Text(
                         '₱${total.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary),
+                        style: AppTextStyles.heroNumber
+                            .copyWith(color: AppColors.primary),
                       ),
                     ],
                   ),
@@ -805,18 +817,12 @@ class _PaymentPage extends StatelessWidget {
                 const SizedBox(height: AppSizes.lg),
 
                 // Payment methods
-                const Text('PAYMENT METHOD',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: AppColors.gray400)),
+                const Text('PAYMENT METHOD', style: AppTextStyles.labelCaps),
                 const SizedBox(height: AppSizes.sm),
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.rCard),
+                    borderRadius: BorderRadius.circular(AppSizes.rCard),
                     boxShadow: AppShadows.sm,
                   ),
                   child: Column(
@@ -824,11 +830,10 @@ class _PaymentPage extends StatelessWidget {
                       _PaymentMethodTile(
                         icon: Icons.credit_card_outlined,
                         label: 'Credit / Debit Card',
-                        subtitle: 'Swipe or tap',
-                        selected:
-                            selectedMethod == PaymentMethod.card,
-                        onTap: () =>
-                            onMethodSelected(PaymentMethod.card),
+                        subtitle: 'Requires a configured payment gateway',
+                        selected: selectedMethod == PaymentMethod.card,
+                        enabled: false,
+                        onTap: () => onMethodSelected(PaymentMethod.card),
                       ),
                       const Divider(
                           height: 1,
@@ -838,10 +843,8 @@ class _PaymentPage extends StatelessWidget {
                         icon: Icons.attach_money_rounded,
                         label: 'Cash',
                         subtitle: 'Manual entry',
-                        selected:
-                            selectedMethod == PaymentMethod.cash,
-                        onTap: () =>
-                            onMethodSelected(PaymentMethod.cash),
+                        selected: selectedMethod == PaymentMethod.cash,
+                        onTap: () => onMethodSelected(PaymentMethod.cash),
                       ),
                       const Divider(
                           height: 1,
@@ -849,12 +852,35 @@ class _PaymentPage extends StatelessWidget {
                           indent: AppSizes.screenH),
                       _PaymentMethodTile(
                         icon: Icons.phone_android_rounded,
-                        label: 'GCash / Maya',
-                        subtitle: 'QR code payment',
-                        selected:
-                            selectedMethod == PaymentMethod.qrph,
-                        onTap: () =>
-                            onMethodSelected(PaymentMethod.qrph),
+                        label: 'GCash',
+                        subtitle: 'Requires a configured payment gateway',
+                        selected: selectedMethod == PaymentMethod.gcash,
+                        enabled: false,
+                        onTap: () => onMethodSelected(PaymentMethod.gcash),
+                      ),
+                      const Divider(
+                          height: 1,
+                          color: AppColors.gray100,
+                          indent: AppSizes.screenH),
+                      _PaymentMethodTile(
+                        icon: Icons.qr_code_2_rounded,
+                        label: 'Maya',
+                        subtitle: 'Requires a configured payment gateway',
+                        selected: selectedMethod == PaymentMethod.maya,
+                        enabled: false,
+                        onTap: () => onMethodSelected(PaymentMethod.maya),
+                      ),
+                      const Divider(
+                          height: 1,
+                          color: AppColors.gray100,
+                          indent: AppSizes.screenH),
+                      _PaymentMethodTile(
+                        icon: Icons.account_balance_outlined,
+                        label: 'Bank Transfer',
+                        subtitle: 'Requires a configured payment gateway',
+                        selected: selectedMethod == PaymentMethod.bank,
+                        enabled: false,
+                        onTap: () => onMethodSelected(PaymentMethod.bank),
                       ),
                     ],
                   ),
@@ -863,12 +889,7 @@ class _PaymentPage extends StatelessWidget {
                 // Tendered amount — cash only
                 if (selectedMethod == PaymentMethod.cash) ...[
                   const SizedBox(height: AppSizes.lg),
-                  const Text('TENDERED AMOUNT',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                          color: AppColors.gray400)),
+                  const Text('TENDERED AMOUNT', style: AppTextStyles.labelCaps),
                   const SizedBox(height: AppSizes.sm),
                   Wrap(
                     spacing: AppSizes.sm,
@@ -878,11 +899,9 @@ class _PaymentPage extends StatelessWidget {
                       return GestureDetector(
                         onTap: () => onTenderedSelected(opt.amount),
                         child: AnimatedContainer(
-                          duration:
-                              const Duration(milliseconds: 150),
+                          duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: AppSizes.md,
-                              vertical: AppSizes.sm),
+                              horizontal: AppSizes.md, vertical: AppSizes.sm),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? AppColors.primaryLight
@@ -891,13 +910,11 @@ class _PaymentPage extends StatelessWidget {
                                 color: isSelected
                                     ? AppColors.primary
                                     : AppColors.gray200),
-                            borderRadius: BorderRadius.circular(
-                                AppSizes.rPill),
+                            borderRadius: BorderRadius.circular(AppSizes.rPill),
                           ),
                           child: Text(
                             opt.label,
-                            style: TextStyle(
-                              fontSize: 13,
+                            style: AppTextStyles.bodyMd.copyWith(
                               fontWeight: FontWeight.w600,
                               color: isSelected
                                   ? AppColors.primary
@@ -912,17 +929,14 @@ class _PaymentPage extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Change',
-                          style: TextStyle(
-                              fontSize: 13,
-                              color: AppColors.gray400)),
+                      Text('Change',
+                          style: AppTextStyles.bodyMd
+                              .copyWith(color: AppColors.gray400)),
                       Text(
                         tendered >= total
                             ? '₱${change.toStringAsFixed(0)}'
                             : '—',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyles.titleMd.copyWith(
                           color: tendered >= total
                               ? AppColors.success
                               : AppColors.gray400,
@@ -933,9 +947,24 @@ class _PaymentPage extends StatelessWidget {
                 ],
 
                 // QR panel — GCash / Maya
-                if (selectedMethod == PaymentMethod.qrph) ...[
+                if (selectedMethod != PaymentMethod.cash) ...[
                   const SizedBox(height: AppSizes.lg),
-                  _QrPhPanel(total: total),
+                  TextField(
+                    controller: paymentReferenceController,
+                    onChanged: onReferenceChanged,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      labelText: '${selectedMethod.label} reference',
+                      hintText: 'Enter confirmed transaction reference',
+                      prefixIcon: const Icon(Icons.tag_rounded),
+                      helperText: 'Required. Verify payment before confirming.',
+                    ),
+                  ),
+                ],
+                if (selectedMethod == PaymentMethod.gcash ||
+                    selectedMethod == PaymentMethod.maya) ...[
+                  const SizedBox(height: AppSizes.lg),
+                  _QrPhPanel(total: total, method: selectedMethod),
                 ],
 
                 const SizedBox(height: 80),
@@ -960,8 +989,7 @@ class _PaymentPage extends StatelessWidget {
               icon: const Icon(Icons.check_rounded, size: 18),
               label: Text(
                 'Confirm Payment · ₱${total.toStringAsFixed(0)}',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700),
+                style: AppTextStyles.titleMd.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
@@ -969,8 +997,7 @@ class _PaymentPage extends StatelessWidget {
                 disabledBackgroundColor: AppColors.gray200,
                 disabledForegroundColor: AppColors.gray400,
                 shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppSizes.rButton)),
+                    borderRadius: BorderRadius.circular(AppSizes.rButton)),
               ),
             ),
           ),
@@ -989,18 +1016,22 @@ class _PaymentMethodTile extends StatelessWidget {
     required this.subtitle,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
   final String label;
   final String subtitle;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: GestureDetector(
+      onTap: enabled ? onTap : null,
       behavior: HitTestBehavior.opaque,
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -1017,9 +1048,7 @@ class _PaymentMethodTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppSizes.rInput),
               ),
               child: Icon(icon,
-                  color: selected
-                      ? AppColors.primary
-                      : AppColors.gray600,
+                  color: selected ? AppColors.primary : AppColors.gray600,
                   size: 18),
             ),
             const SizedBox(width: AppSizes.md),
@@ -1029,16 +1058,14 @@ class _PaymentMethodTile extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(
-                        fontSize: 14,
+                    style: AppTextStyles.bodyLg.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: selected
-                            ? AppColors.primary
-                            : AppColors.gray800),
+                        color:
+                            selected ? AppColors.primary : AppColors.gray800),
                   ),
                   Text(subtitle,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.gray400)),
+                      style: AppTextStyles.bodySm
+                          .copyWith(color: AppColors.gray400)),
                 ],
               ),
             ),
@@ -1047,23 +1074,20 @@ class _PaymentMethodTile extends StatelessWidget {
               width: 20,
               height: 20,
               decoration: BoxDecoration(
-                color:
-                    selected ? AppColors.primary : Colors.transparent,
+                color: selected ? AppColors.primary : Colors.transparent,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: selected
-                      ? AppColors.primary
-                      : AppColors.gray200,
+                  color: selected ? AppColors.primary : AppColors.gray200,
                   width: 1.5,
                 ),
               ),
               child: selected
-                  ? const Icon(Icons.circle,
-                      color: Colors.white, size: 8)
+                  ? const Icon(Icons.circle, color: Colors.white, size: 8)
                   : null,
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1077,116 +1101,17 @@ class _TenderedOption {
   final String label;
 }
 
-// ── Void permission dialog ────────────────────────────────────────────────────
-
-class _VoidPermissionDialog extends StatefulWidget {
-  const _VoidPermissionDialog({
-    required this.title,
-    required this.message,
-    required this.onConfirmed,
-  });
-  final String title;
-  final String message;
-  final VoidCallback onConfirmed;
-
-  @override
-  State<_VoidPermissionDialog> createState() =>
-      _VoidPermissionDialogState();
-}
-
-class _VoidPermissionDialogState extends State<_VoidPermissionDialog> {
-  final _controller = TextEditingController();
-  bool _obscure = true;
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _confirm() {
-    if (_controller.text != voidPermissionCode) {
-      setState(() => _error = 'Incorrect code. Try again.');
-      return;
-    }
-    Navigator.pop(context);
-    widget.onConfirmed();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          const Icon(Icons.lock_outline, color: AppColors.error, size: 20),
-          const SizedBox(width: AppSizes.sm),
-          Text(widget.title),
-        ],
-      ),
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(widget.message,
-              style: const TextStyle(
-                  fontSize: 13, color: AppColors.gray600)),
-          const SizedBox(height: AppSizes.lg),
-          TextField(
-            controller: _controller,
-            obscureText: _obscure,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Supervisor Code',
-              prefixIcon: const Icon(Icons.lock_outline),
-              border: const OutlineInputBorder(),
-              errorText: _error,
-              suffixIcon: IconButton(
-                icon: Icon(_obscure
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined),
-                onPressed: () =>
-                    setState(() => _obscure = !_obscure),
-              ),
-            ),
-            onChanged: (_) => setState(() => _error = null),
-            onSubmitted: (_) => _confirm(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _confirm,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.error,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppSizes.rButton)),
-          ),
-          child: const Text('Confirm'),
-        ),
-      ],
-    );
-  }
-}
-
 // ── QRPh panel ────────────────────────────────────────────────────────────────
 
 class _QrPhPanel extends StatelessWidget {
-  const _QrPhPanel({required this.total});
+  const _QrPhPanel({required this.total, required this.method});
   final double total;
+  final PaymentMethod method;
 
   @override
   Widget build(BuildContext context) {
     final qrData =
-        'QRPH|XANTARA|MERCHANT001|AMOUNT:${total.toStringAsFixed(2)}|REF:${DateTime.now().millisecondsSinceEpoch}';
+        'QRPH|${method.name.toUpperCase()}|XANTARA-TRAINING|AMOUNT:${total.toStringAsFixed(2)}|REF:${DateTime.now().millisecondsSinceEpoch}';
 
     return Column(
       children: [
@@ -1209,15 +1134,12 @@ class _QrPhPanel extends StatelessWidget {
               Image.asset(
                 'assets/images/xantara-logo.png',
                 height: 24,
-                errorBuilder: (_, __, ___) =>
-                    const SizedBox.shrink(),
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 4),
-              const Text('Scan to Pay',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.gray400,
-                      fontWeight: FontWeight.w500)),
+              Text('Scan to Pay',
+                  style: AppTextStyles.bodySm.copyWith(
+                      color: AppColors.gray400, fontWeight: FontWeight.w500)),
               const SizedBox(height: AppSizes.md),
               QrImageView(
                 data: qrData,
@@ -1235,11 +1157,8 @@ class _QrPhPanel extends StatelessWidget {
               const SizedBox(height: AppSizes.sm),
               Text(
                 '₱${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryDark,
-                ),
+                style:
+                    AppTextStyles.displayMd.copyWith(color: AppColors.primaryDark),
               ),
             ],
           ),
@@ -1252,16 +1171,16 @@ class _QrPhPanel extends StatelessWidget {
             color: AppColors.primaryLight,
             borderRadius: BorderRadius.circular(AppSizes.rCard),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.info_outline,
+              const Icon(Icons.info_outline,
                   size: 15, color: AppColors.primary),
-              SizedBox(width: AppSizes.sm),
+              const SizedBox(width: AppSizes.sm),
               Expanded(
                 child: Text(
-                  'Ask the customer to scan using any QRPh-supported app. Tap Confirm Payment once paid.',
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.primary),
+                  'Training QR only. Verify the ${method.label} payment independently, enter its reference, then confirm.',
+                  style: AppTextStyles.bodySm
+                      .copyWith(color: AppColors.primary),
                 ),
               ),
             ],

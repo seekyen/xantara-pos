@@ -1,10 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'features/customer_display/customer_display_window.dart';
+import 'local/database.dart';
+import 'local/database_connection.dart';
+import 'local/database_providers.dart';
+import 'local/database_seed.dart';
+import 'local/local_pos_store.dart';
+import 'features/pos/providers/pos_provider.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +31,7 @@ void main(List<String> args) async {
   }
 
   // Main POS window — apply window_manager only on desktop platforms
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     await windowManager.ensureInitialized();
     const WindowOptions windowOptions = WindowOptions(
       minimumSize: Size(800, 600),
@@ -39,5 +47,19 @@ void main(List<String> args) async {
     });
   }
 
-  runApp(const ProviderScope(child: PosApp()));
+  final preferences = await SharedPreferences.getInstance();
+  final localStore = SharedPreferencesPosStore(preferences);
+
+  final database = AppDatabase(await openAppDatabaseExecutor());
+  await seedDatabaseIfEmpty(database);
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        localPosStoreProvider.overrideWithValue(localStore),
+        appDatabaseProvider.overrideWithValue(database),
+      ],
+      child: const PosApp(),
+    ),
+  );
 }
