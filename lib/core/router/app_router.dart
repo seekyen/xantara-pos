@@ -4,7 +4,10 @@ import '../../features/auth/models/user_model.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/splash/screens/splash_screen.dart';
-import '../../features/pos/screens/pos_screen.dart';
+import '../../features/pos/fnb/screens/pos_screen.dart';
+import '../../features/pos/pos_coming_soon_screen.dart';
+import '../../features/pos/pos_mode_selector.dart';
+import '../../features/pos/retail/screens/grocery_pos_screen.dart';
 import '../../features/admin/screens/admin_dashboard_screen.dart';
 import '../../features/analytics/screens/analytics_screen.dart';
 import '../../features/inventory/screens/inventory_screen.dart';
@@ -53,6 +56,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/pos',
         builder: (context, state) => const PosScreen(),
+      ),
+      GoRoute(
+        path: '/pos/retail',
+        builder: (context, state) => const GroceryPosScreen(),
+      ),
+      GoRoute(
+        path: '/pos/coming-soon',
+        builder: (context, state) =>
+            PosComingSoonScreen(mode: state.extra as PosBusinessMode),
       ),
       GoRoute(
         path: '/cashier',

@@ -7,8 +7,9 @@ import 'package:intl/intl.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../checkout/providers/checkout_provider.dart';
-import '../../pos/providers/pos_provider.dart';
+import '../../pos/fnb/providers/pos_provider.dart';
 import '../../orders/providers/orders_provider.dart';
+import '../../pos/pos_mode_selector.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -234,7 +235,7 @@ class AdminDashboardScreen extends ConsumerWidget {
                     label: 'Open POS',
                     subtitle: 'Start processing orders',
                     iconColor: AppColors.primary,
-                    onTap: () => context.push('/pos'),
+                    onTap: () => openPos(context),
                   ),
                   const SizedBox(height: AppSizes.sm),
                   _ActionButton(

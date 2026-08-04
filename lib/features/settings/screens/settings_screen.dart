@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../../auth/models/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../pos/providers/cart_provider.dart';
+import '../../pos/fnb/providers/cart_provider.dart';
 import '../../cashier/providers/shift_provider.dart';
 import '../providers/settings_provider.dart';
 import '../../../core/constants/app_colors.dart';

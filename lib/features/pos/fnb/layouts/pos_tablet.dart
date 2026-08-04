@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/cart_panel.dart';
-import '../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_colors.dart';
 
 // TABLET — two-panel layout: product browser (left) + cart/order summary (right)
 class PosTabletLayout extends StatelessWidget {
