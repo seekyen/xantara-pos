@@ -12,7 +12,7 @@ import 'local/database_connection.dart';
 import 'local/database_providers.dart';
 import 'local/database_seed.dart';
 import 'local/local_pos_store.dart';
-import 'features/pos/providers/pos_provider.dart';
+import 'features/pos/fnb/providers/pos_provider.dart';
 
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();

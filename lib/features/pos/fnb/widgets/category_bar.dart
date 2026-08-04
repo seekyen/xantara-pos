@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/pos_provider.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_sizes.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
 
 class CategoryBar extends ConsumerWidget {
   const CategoryBar({super.key});

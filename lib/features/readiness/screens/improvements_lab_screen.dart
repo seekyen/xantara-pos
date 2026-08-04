@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
-import '../../pos/providers/pos_provider.dart';
+import '../../pos/fnb/providers/pos_provider.dart';
 
 final _offlineTestProvider = StateProvider<bool>((ref) => true);
 final _premiumProvider = StateProvider<bool>((ref) => false);

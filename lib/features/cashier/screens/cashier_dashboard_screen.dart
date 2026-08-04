@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../pos/providers/cart_provider.dart';
+import '../../pos/fnb/providers/cart_provider.dart';
+import '../../pos/pos_mode_selector.dart';
 import '../providers/shift_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
@@ -160,7 +161,7 @@ class CashierDashboardScreen extends ConsumerWidget {
                           enabled: shift.isClockedIn,
                           disabledReason:
                               'Clock in first to use the POS',
-                          onTap: () => context.push('/pos'),
+                          onTap: () => openPos(context),
                         ),
                         const SizedBox(height: AppSizes.sm),
                         _ActionButton(

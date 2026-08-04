@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/cart_provider.dart';
 import '../providers/pos_provider.dart';
-import '../../../core/auth/pos_authorization.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_sizes.dart';
-import '../../../core/constants/app_text_styles.dart';
-import '../../../local/database_seed.dart';
-import '../../../shared/widgets/supervisor_authorization_dialog.dart';
+import '../../../../core/auth/pos_authorization.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../local/database_seed.dart';
+import '../../../../shared/widgets/supervisor_authorization_dialog.dart';
 
 class CartPanel extends ConsumerWidget {
   const CartPanel({super.key, this.onCheckout});

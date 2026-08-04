@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../checkout/providers/checkout_provider.dart';
-import '../../pos/providers/pos_provider.dart';
+import '../../pos/fnb/providers/pos_provider.dart';
 import '../../../core/compliance/bir_invoice.dart';
 import '../../../core/payments/payment.dart';
 import '../../../local/database_providers.dart';

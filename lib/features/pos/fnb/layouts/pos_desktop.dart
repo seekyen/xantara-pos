@@ -5,9 +5,9 @@ import '../providers/cart_provider.dart';
 import '../providers/pos_provider.dart';
 import '../widgets/product_grid.dart';
 import '../widgets/cart_panel.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_sizes.dart';
-import '../../../core/constants/app_text_styles.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
 
 // DESKTOP — persistent 3-column layout with keyboard shortcuts
 class PosDesktopLayout extends ConsumerWidget {

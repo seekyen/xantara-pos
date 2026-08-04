@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/pos_provider.dart';
 import '../providers/cart_provider.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/constants/app_sizes.dart';
-import '../../../core/constants/app_text_styles.dart';
-import '../../../shared/widgets/stock_badge.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_sizes.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/stock_badge.dart';
 
 class ProductGrid extends ConsumerStatefulWidget {
   const ProductGrid({super.key});

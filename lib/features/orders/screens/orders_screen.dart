@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../checkout/providers/checkout_provider.dart';
-import '../../pos/providers/pos_provider.dart';
+import '../../pos/fnb/providers/pos_provider.dart';
 import '../providers/orders_provider.dart';
 import '../../../core/auth/pos_authorization.dart';
 import '../../../core/constants/app_colors.dart';

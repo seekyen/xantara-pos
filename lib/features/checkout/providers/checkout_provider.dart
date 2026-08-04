@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import '../../pos/providers/cart_provider.dart';
+import '../../pos/fnb/providers/cart_provider.dart';
 import '../../../core/compliance/bir_invoice.dart' as bir;
 
 enum PaymentMethod { card, cash, gcash, maya, bank, qrph }

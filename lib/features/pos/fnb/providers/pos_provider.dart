@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../local/database_providers.dart';
-import '../../../local/database_seed.dart';
-import '../../../local/local_pos_store.dart';
-import '../../../local/repositories/catalog_repository.dart';
+import '../../../../local/database_providers.dart';
+import '../../../../local/database_seed.dart';
+import '../../../../local/local_pos_store.dart';
+import '../../../../local/repositories/catalog_repository.dart';
 
 class Category {
   final String id;
