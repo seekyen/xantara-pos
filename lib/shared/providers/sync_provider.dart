@@ -1,5 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/sync/cloud_sync_controller.dart';
+import '../../features/pos/fnb/providers/pos_provider.dart';
+import '../../local/database_providers.dart';
+
 enum SyncStatus { synced, syncing, offline, complete }
 
 class SyncState {
@@ -14,20 +18,55 @@ class SyncState {
 }
 
 class SyncNotifier extends StateNotifier<SyncState> {
-  SyncNotifier() : super(const SyncState());
+  SyncNotifier(this._controller) : super(const SyncState());
+
+  final CloudSyncController _controller;
 
   void setSynced() =>
       state = state.copyWith(status: SyncStatus.synced, queued: 0);
 
-  void setSyncing() =>
-      state = state.copyWith(status: SyncStatus.syncing);
+  void setSyncing() => state = state.copyWith(status: SyncStatus.syncing);
 
   void setOffline(int queued) =>
       state = state.copyWith(status: SyncStatus.offline, queued: queued);
 
   void setComplete(int uploaded) =>
       state = state.copyWith(status: SyncStatus.complete, queued: uploaded);
+
+  Future<void> connectAndSync({
+    required String email,
+    required String password,
+  }) async {
+    setSyncing();
+    try {
+      await _controller.connect(email: email, password: password);
+      final uploaded = await _controller.syncNow();
+      setComplete(uploaded);
+    } catch (_) {
+      state = state.copyWith(status: SyncStatus.offline);
+      rethrow;
+    }
+  }
+
+  Future<void> syncNow() async {
+    setSyncing();
+    try {
+      final uploaded = await _controller.syncNow();
+      setComplete(uploaded);
+    } catch (_) {
+      state = state.copyWith(status: SyncStatus.offline);
+      rethrow;
+    }
+  }
 }
 
-final syncProvider =
-    StateNotifierProvider<SyncNotifier, SyncState>((ref) => SyncNotifier());
+final cloudSyncControllerProvider = Provider<CloudSyncController>(
+  (ref) => CloudSyncController(
+    database: ref.watch(appDatabaseProvider),
+    store: ref.watch(localPosStoreProvider),
+  ),
+);
+
+final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>(
+  (ref) => SyncNotifier(ref.watch(cloudSyncControllerProvider)),
+);

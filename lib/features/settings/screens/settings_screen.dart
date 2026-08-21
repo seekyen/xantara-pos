@@ -30,7 +30,8 @@ class SettingsScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: Text('Settings', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+        title: Text('Settings',
+            style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         leading: const BackButton(color: AppColors.gray800),
       ),
       body: ListView(
@@ -68,7 +69,9 @@ class _ProfileCard extends ConsumerWidget {
     final user = ref.watch(authProvider).user;
     if (user == null) return const SizedBox.shrink();
 
-    final initials = user.name.trim().split(' ')
+    final initials = user.name
+        .trim()
+        .split(' ')
         .where((w) => w.isNotEmpty)
         .take(2)
         .map((w) => w[0].toUpperCase())
@@ -82,9 +85,7 @@ class _ProfileCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppSizes.rCard),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 3,
-              offset: Offset(0, 1)),
+              color: Color(0x0A000000), blurRadius: 3, offset: Offset(0, 1)),
         ],
       ),
       child: Row(
@@ -112,15 +113,14 @@ class _ProfileCard extends ConsumerWidget {
                 Text(user.name, style: AppTextStyles.titleMd),
                 const SizedBox(height: 2),
                 Text('$roleLabel · ${user.email}',
-                    style: AppTextStyles.bodySm
-                        .copyWith(color: AppColors.gray400),
+                    style:
+                        AppTextStyles.bodySm.copyWith(color: AppColors.gray400),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right,
-              color: AppColors.gray200, size: 20),
+          const Icon(Icons.chevron_right, color: AppColors.gray200, size: 20),
         ],
       ),
     );
@@ -148,9 +148,7 @@ class _SignOutTile extends ConsumerWidget {
           borderRadius: BorderRadius.circular(AppSizes.rCard),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x0A000000),
-                blurRadius: 3,
-                offset: Offset(0, 1)),
+                color: Color(0x0A000000), blurRadius: 3, offset: Offset(0, 1)),
           ],
         ),
         child: Row(
@@ -188,8 +186,7 @@ class _StoreSection extends ConsumerWidget {
             context: context,
             title: 'Branch',
             current: branch,
-            onSave: (v) =>
-                ref.read(branchProvider.notifier).state = v,
+            onSave: (v) => ref.read(branchProvider.notifier).state = v,
           ),
         ),
         const Divider(height: 1, color: AppColors.gray100, indent: AppSizes.lg),
@@ -202,8 +199,7 @@ class _StoreSection extends ConsumerWidget {
               context: context,
               title: 'Receipt Header',
               current: current,
-              onSave: (v) =>
-                  ref.read(receiptHeaderProvider.notifier).state = v,
+              onSave: (v) => ref.read(receiptHeaderProvider.notifier).state = v,
             );
           },
         ),
@@ -233,8 +229,7 @@ class _StoreSection extends ConsumerWidget {
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(
-              border: OutlineInputBorder()),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
         ),
         actions: [
           TextButton(
@@ -251,8 +246,7 @@ class _StoreSection extends ConsumerWidget {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppSizes.rButton)),
+                  borderRadius: BorderRadius.circular(AppSizes.rButton)),
             ),
             child: const Text('Save'),
           ),
@@ -261,13 +255,13 @@ class _StoreSection extends ConsumerWidget {
     );
   }
 
-  void _pickCurrency(
-      BuildContext context, WidgetRef ref, String current) {
+  void _pickCurrency(BuildContext context, WidgetRef ref, String current) {
     const options = ['PHP', 'USD', 'EUR', 'SGD', 'JPY'];
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Currency', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+        title: Text('Currency',
+            style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
         content: Column(
@@ -276,12 +270,10 @@ class _StoreSection extends ConsumerWidget {
               .map((opt) => ListTile(
                     title: Text(opt),
                     trailing: opt == current
-                        ? const Icon(Icons.check,
-                            color: AppColors.primary)
+                        ? const Icon(Icons.check, color: AppColors.primary)
                         : null,
                     onTap: () {
-                      ref.read(currencyProvider.notifier).state =
-                          opt;
+                      ref.read(currencyProvider.notifier).state = opt;
                       Navigator.pop(context);
                     },
                   ))
@@ -319,8 +311,7 @@ class _NavTile extends StatelessWidget {
           Text(value,
               style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray400)),
           const SizedBox(width: 2),
-          const Icon(Icons.chevron_right,
-              size: 16, color: AppColors.gray400),
+          const Icon(Icons.chevron_right, size: 16, color: AppColors.gray400),
         ],
       ),
     );
@@ -355,8 +346,7 @@ class _PreferencesSection extends ConsumerWidget {
         _PrefSwitch(
           label: 'Sound effects',
           value: sound,
-          onChanged: (v) =>
-              ref.read(soundEffectsProvider.notifier).state = v,
+          onChanged: (v) => ref.read(soundEffectsProvider.notifier).state = v,
         ),
         const Divider(height: 1, color: AppColors.gray100, indent: AppSizes.lg),
         _PrefSwitch(
@@ -366,7 +356,8 @@ class _PreferencesSection extends ConsumerWidget {
               v ? ThemeMode.dark : ThemeMode.light,
         ),
         if (bioAvailable) ...[
-          const Divider(height: 1, color: AppColors.gray100, indent: AppSizes.lg),
+          const Divider(
+              height: 1, color: AppColors.gray100, indent: AppSizes.lg),
           _PrefSwitch(
             label: 'Biometric login',
             value: bioEnabled,
@@ -477,27 +468,32 @@ class _CloudSyncTile extends ConsumerWidget {
     final sync = ref.watch(syncProvider);
 
     final (label, color) = switch (sync.status) {
-      SyncStatus.synced   => ('Active', AppColors.success),
-      SyncStatus.syncing  => ('Syncing…', AppColors.warning),
-      SyncStatus.offline  => ('Offline', AppColors.gray400),
+      SyncStatus.synced => ('Active', AppColors.success),
+      SyncStatus.syncing => ('Syncing…', AppColors.warning),
+      SyncStatus.offline => ('Offline', AppColors.gray400),
       SyncStatus.complete => ('Synced', AppColors.success),
     };
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSizes.lg, vertical: AppSizes.md),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppSizes.rCard),
-        boxShadow: const [
-          BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 3,
-              offset: Offset(0, 1)),
-        ],
-      ),
-      child: Row(
-        children: [
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppSizes.rCard),
+      onTap: sync.status == SyncStatus.syncing
+          ? null
+          : () => showDialog<void>(
+                context: context,
+                builder: (_) => const _CloudSyncDialog(),
+              ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSizes.lg, vertical: AppSizes.md),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppSizes.rCard),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0A000000), blurRadius: 3, offset: Offset(0, 1)),
+          ],
+        ),
+        child: Row(children: [
           Container(
             width: 36,
             height: 36,
@@ -526,8 +522,8 @@ class _CloudSyncTile extends ConsumerWidget {
                 Container(
                   width: 7,
                   height: 7,
-                  decoration: BoxDecoration(
-                      color: color, shape: BoxShape.circle),
+                  decoration:
+                      BoxDecoration(color: color, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 5),
                 Text(label,
@@ -536,8 +532,108 @@ class _CloudSyncTile extends ConsumerWidget {
               ],
             ),
           ),
-        ],
+          const SizedBox(width: AppSizes.sm),
+          const Icon(Icons.chevron_right, color: AppColors.gray400, size: 18),
+        ]),
       ),
+    );
+  }
+}
+
+class _CloudSyncDialog extends ConsumerStatefulWidget {
+  const _CloudSyncDialog();
+
+  @override
+  ConsumerState<_CloudSyncDialog> createState() => _CloudSyncDialogState();
+}
+
+class _CloudSyncDialogState extends ConsumerState<_CloudSyncDialog> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(syncProvider.notifier).connectAndSync(
+            email: _email.text,
+            password: _password.text,
+          );
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = error.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Connect Xantara Cloud'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Use a Xantara web administrator account. The password is sent '
+              'only to Xantara Cloud and is never saved on this device.',
+            ),
+            const SizedBox(height: AppSizes.md),
+            TextField(
+              controller: _email,
+              enabled: !_busy,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.username],
+              decoration: const InputDecoration(labelText: 'Cloud email'),
+            ),
+            const SizedBox(height: AppSizes.sm),
+            TextField(
+              controller: _password,
+              enabled: !_busy,
+              obscureText: true,
+              autofillHints: const [AutofillHints.password],
+              onSubmitted: (_) => _busy ? null : _connect(),
+              decoration: const InputDecoration(labelText: 'Cloud password'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSizes.sm),
+              Text(_error!, style: const TextStyle(color: AppColors.error)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _connect,
+          child: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Connect & sync'),
+        ),
+      ],
     );
   }
 }
@@ -567,7 +663,8 @@ class _SectionCard extends StatelessWidget {
               const SizedBox(width: AppSizes.xs),
               Text(
                 title.toUpperCase(),
-                style: AppTextStyles.labelCaps.copyWith(color: AppColors.primary),
+                style:
+                    AppTextStyles.labelCaps.copyWith(color: AppColors.primary),
               ),
               const Spacer(),
             ],
@@ -611,10 +708,12 @@ class _AppearanceSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Theme Color', style: AppTextStyles.labelMd.copyWith(fontSize: 14)),
+              Text('Theme Color',
+                  style: AppTextStyles.labelMd.copyWith(fontSize: 14)),
               const SizedBox(height: 4),
               Text('Changes the primary color across the app',
-                  style: AppTextStyles.bodySm.copyWith(color: AppColors.gray400)),
+                  style:
+                      AppTextStyles.bodySm.copyWith(color: AppColors.gray400)),
               const SizedBox(height: AppSizes.md),
               Wrap(
                 spacing: AppSizes.sm,
@@ -623,9 +722,8 @@ class _AppearanceSection extends ConsumerWidget {
                   final isSelected =
                       option.color.toARGB32() == seedColor.toARGB32();
                   return GestureDetector(
-                    onTap: () => ref
-                        .read(colorSeedProvider.notifier)
-                        .state = option.color,
+                    onTap: () => ref.read(colorSeedProvider.notifier).state =
+                        option.color,
                     child: Tooltip(
                       message: option.label,
                       child: AnimatedContainer(
@@ -639,15 +737,13 @@ class _AppearanceSection extends ConsumerWidget {
                               ? Border.all(
                                   color: Colors.white,
                                   width: 3,
-                                  strokeAlign:
-                                      BorderSide.strokeAlignOutside,
+                                  strokeAlign: BorderSide.strokeAlignOutside,
                                 )
                               : null,
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: option.color
-                                        .withValues(alpha: 0.5),
+                                    color: option.color.withValues(alpha: 0.5),
                                     blurRadius: 8,
                                     spreadRadius: 1,
                                   )
@@ -714,8 +810,7 @@ class _AppVersionTile extends ConsumerWidget {
                     style: AppTextStyles.bodyMd
                         .copyWith(fontWeight: FontWeight.w600)),
                 info.when(
-                  data: (i) => Text(
-                      'v${i.version} (build ${i.buildNumber})',
+                  data: (i) => Text('v${i.version} (build ${i.buildNumber})',
                       style: AppTextStyles.caption),
                   loading: () =>
                       const Text('...', style: AppTextStyles.caption),
