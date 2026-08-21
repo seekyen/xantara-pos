@@ -72,7 +72,8 @@ class Products extends Table {
   IntColumn get unitPriceCentavos => integer()();
   TextColumn get categoryId =>
       text().withDefault(const Constant('uncategorized'))();
-  IntColumn get colorArgb => integer().withDefault(const Constant(0xFF6F4E37))();
+  IntColumn get colorArgb =>
+      integer().withDefault(const Constant(0xFF6F4E37))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime()();
@@ -347,7 +348,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -359,9 +360,93 @@ class AppDatabase extends _$AppDatabase {
             await migrator.addColumn(products, products.categoryId);
             await migrator.addColumn(products, products.colorArgb);
           }
+          if (from < 3) {
+            await _replaceUntouchedTrainingInventory();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  Future<void> _replaceUntouchedTrainingInventory() async {
+    final transactionalCounts = await Future.wait([
+      select(invoices).get().then((rows) => rows.length),
+      select(inventoryMovements).get().then((rows) => rows.length),
+      select(inventoryTransfers).get().then((rows) => rows.length),
+    ]);
+    if (transactionalCounts.any((count) => count != 0)) return;
+
+    const trainingProductIds = {
+      'b1',
+      'b2',
+      'b3',
+      'b4',
+      'b5',
+      'b6',
+      'f1',
+      'f2',
+      'f3',
+      'f4',
+      'f5',
+      'f6',
+      's1',
+      's2',
+      's3',
+      's4',
+      'd1',
+      'd2',
+      'd3',
+      'd4',
+    };
+    final existingProducts = await select(products).get();
+    if (existingProducts.length != trainingProductIds.length ||
+        existingProducts.any((row) => !trainingProductIds.contains(row.id))) {
+      return;
+    }
+
+    final now = DateTime.now();
+    await (update(branches)..where((row) => row.id.equals('branch-main')))
+        .write(const BranchesCompanion(
+      code: Value('MAIN'),
+      name: Value('Head Office'),
+    ));
+    await (update(branches)..where((row) => row.id.equals('branch-br002')))
+        .write(const BranchesCompanion(
+      code: Value('BGC'),
+      name: Value('BGC'),
+    ));
+    await (update(branches)..where((row) => row.id.equals('branch-br003')))
+        .write(const BranchesCompanion(
+      code: Value('MKT'),
+      name: Value('Makati'),
+    ));
+
+    await delete(branchInventories).go();
+    await delete(products).go();
+    await into(products).insert(ProductsCompanion.insert(
+      id: 'SAMPLE-001',
+      sku: 'SAMPLE-001',
+      name: 'Sample Product',
+      taxCategory: 'vat12',
+      unitPriceCentavos: 10000,
+      categoryId: const Value('sample'),
+      colorArgb: const Value(0xFF1565C0),
+      createdAt: now,
+      updatedAt: now,
+    ));
+    for (final branchId in const [
+      'branch-main',
+      'branch-br002',
+      'branch-br003',
+    ]) {
+      await into(branchInventories).insert(BranchInventoriesCompanion.insert(
+        branchId: branchId,
+        productId: 'SAMPLE-001',
+        stockOnHand: const Value(10),
+        reorderPoint: const Value(2),
+        updatedAt: now,
+      ));
+    }
+  }
 }

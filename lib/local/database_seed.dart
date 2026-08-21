@@ -5,13 +5,17 @@ import '../core/auth/pos_authorization.dart';
 import 'database.dart';
 import 'repositories/staff_auth_repository.dart';
 
-String branchIdForCode(String code) => 'branch-${code.toLowerCase()}';
+String branchIdForCode(String code) => switch (code.toUpperCase()) {
+      'BGC' => 'branch-br002',
+      'MKT' => 'branch-br003',
+      final normalized => 'branch-${normalized.toLowerCase()}',
+    };
 String terminalIdForBranch(String branchId) => '$branchId-pos01';
 
 const _branchNames = {
-  'MAIN': 'Main Branch',
-  'BR002': 'Branch 2',
-  'BR003': 'Branch 3',
+  'MAIN': 'Head Office',
+  'BGC': 'BGC',
+  'MKT': 'Makati',
 };
 
 class _SeedProduct {
@@ -26,26 +30,14 @@ class _SeedProduct {
 }
 
 const _seedProducts = [
-  _SeedProduct('b1', 'Hot Coffee', 8500, 'beverages', 0xFF6F4E37, 50),
-  _SeedProduct('b2', 'Iced Coffee', 9500, 'beverages', 0xFF4A90D9, 40),
-  _SeedProduct('b3', 'Green Tea', 7500, 'beverages', 0xFF5D8A5E, 30),
-  _SeedProduct('b4', 'Orange Juice', 8000, 'beverages', 0xFFE8821A, 25),
-  _SeedProduct('b5', 'Mineral Water', 2500, 'beverages', 0xFF78C1D4, 100),
-  _SeedProduct('b6', 'Lemonade', 7000, 'beverages', 0xFFD4C026, 20),
-  _SeedProduct('f1', 'Chicken Sandwich', 12000, 'food', 0xFFD4A056, 15),
-  _SeedProduct('f2', 'Cheeseburger', 15000, 'food', 0xFFBE4B26, 10),
-  _SeedProduct('f3', 'Pepperoni Pizza', 18000, 'food', 0xFFCC3A3A, 8),
-  _SeedProduct('f4', 'Caesar Salad', 11000, 'food', 0xFF6FAE6F, 12),
-  _SeedProduct('f5', 'Pasta Carbonara', 16000, 'food', 0xFFD4BE8A, 9),
-  _SeedProduct('f6', 'Fish & Chips', 14500, 'food', 0xFFD4A826, 11),
-  _SeedProduct('s1', 'Potato Chips', 4500, 'snacks', 0xFFD4B44A, 60),
-  _SeedProduct('s2', 'Choco Cookie', 5500, 'snacks', 0xFF7B5C3E, 45),
-  _SeedProduct('s3', 'Blueberry Muffin', 6500, 'snacks', 0xFF6A5ACD, 20),
-  _SeedProduct('s4', 'Pretzel', 5000, 'snacks', 0xFFC4924A, 30),
-  _SeedProduct('d1', 'Ice Cream', 7500, 'desserts', 0xFFE8A0C0, 35),
-  _SeedProduct('d2', 'Chocolate Cake', 9500, 'desserts', 0xFF5C3D2E, 15),
-  _SeedProduct('d3', 'Brownie', 8500, 'desserts', 0xFF4A2F1A, 22),
-  _SeedProduct('d4', 'Cheesecake', 11000, 'desserts', 0xFFE8D5A0, 10),
+  _SeedProduct(
+    'SAMPLE-001',
+    'Sample Product',
+    10000,
+    'sample',
+    0xFF1565C0,
+    10,
+  ),
 ];
 
 /// Demo/training credentials, seeded once on first run so the app is usable
