@@ -47,19 +47,99 @@ void main(List<String> args) async {
     });
   }
 
+  runApp(const _BootstrapApp());
+}
+
+class _AppDependencies {
+  const _AppDependencies(this.localStore, this.database);
+
+  final SharedPreferencesPosStore localStore;
+  final AppDatabase database;
+}
+
+Future<_AppDependencies> _initializeApp() async {
   final preferences = await SharedPreferences.getInstance();
   final localStore = SharedPreferencesPosStore(preferences);
-
   final database = AppDatabase(await openAppDatabaseExecutor());
-  await seedDatabaseIfEmpty(database);
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        localPosStoreProvider.overrideWithValue(localStore),
-        appDatabaseProvider.overrideWithValue(database),
-      ],
-      child: const PosApp(),
-    ),
-  );
+  try {
+    await seedDatabaseIfEmpty(database);
+    return _AppDependencies(localStore, database);
+  } catch (_) {
+    await database.close();
+    rethrow;
+  }
+}
+
+class _BootstrapApp extends StatefulWidget {
+  const _BootstrapApp();
+
+  @override
+  State<_BootstrapApp> createState() => _BootstrapAppState();
+}
+
+class _BootstrapAppState extends State<_BootstrapApp> {
+  late final Future<_AppDependencies> _dependencies = _initializeApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<_AppDependencies>(
+      future: _dependencies,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 40),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Xantara POS could not start.',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                      if (kDebugMode) ...[
+                        const SizedBox(height: 12),
+                        SelectableText(
+                          '${snapshot.error}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.black87),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final dependencies = snapshot.data;
+        if (dependencies == null) {
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        return ProviderScope(
+          overrides: [
+            localPosStoreProvider.overrideWithValue(dependencies.localStore),
+            appDatabaseProvider.overrideWithValue(dependencies.database),
+          ],
+          child: const PosApp(),
+        );
+      },
+    );
+  }
 }
