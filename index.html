@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="pos_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>pos_app</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #f7f8fa;
+      color: #111827;
+      font-family: Arial, sans-serif;
+    }
+
+    #xantara-startup {
+      align-items: center;
+      display: flex;
+      inset: 0;
+      justify-content: center;
+      position: fixed;
+    }
+
+    #xantara-startup-content {
+      max-width: 560px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    #xantara-startup h1 {
+      font-size: 24px;
+      margin: 0 0 16px;
+    }
+
+    #xantara-startup-spinner {
+      animation: xantara-spin 0.8s linear infinite;
+      border: 3px solid #dbe3ef;
+      border-radius: 50%;
+      border-top-color: #2465d8;
+      height: 28px;
+      margin: 0 auto;
+      width: 28px;
+    }
+
+    #xantara-startup-message {
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 16px 0 0;
+    }
+
+    #xantara-startup-details {
+      color: #b42318;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 12px 0 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+
+    @keyframes xantara-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="xantara-startup" role="status">
+    <div id="xantara-startup-content">
+      <h1>Xantara POS</h1>
+      <div id="xantara-startup-spinner"></div>
+      <p id="xantara-startup-message">Starting...</p>
+      <pre id="xantara-startup-details"></pre>
+    </div>
+  </div>
+  <script>
+    function showXantaraStartupError(message) {
+      document.getElementById('xantara-startup-spinner').hidden = true;
+      document.getElementById('xantara-startup-message').textContent =
+        'The application could not start.';
+      document.getElementById('xantara-startup-details').textContent = message;
+    }
+
+    window.addEventListener('error', function (event) {
+      showXantaraStartupError(event.message || 'Unknown browser error');
+    });
+    window.addEventListener('unhandledrejection', function (event) {
+      showXantaraStartupError(String(event.reason || 'Unhandled startup error'));
+    });
+    window.addEventListener('flutter-first-frame', function () {
+      document.getElementById('xantara-startup')?.remove();
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

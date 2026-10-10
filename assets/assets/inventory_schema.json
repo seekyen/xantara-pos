@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "tiers": [
+    {
+      "key": "basic",
+      "label": "Basic",
+      "description": "Everyday stock and pricing"
+    },
+    {
+      "key": "standard",
+      "label": "Standard",
+      "description": "Reorder controls and unit conversions"
+    },
+    {
+      "key": "medium",
+      "label": "Medium",
+      "description": "Suppliers, purchases, batches and variants"
+    },
+    {
+      "key": "large",
+      "label": "Large",
+      "description": "Warehouses, traceability and price tiers"
+    }
+  ],
+  "fields": [
+    {
+      "key": "name",
+      "label": "Product name",
+      "type": "text",
+      "tier": 0,
+      "section": "Product",
+      "required": true,
+      "maxLength": 120
+    },
+    {
+      "key": "sku",
+      "label": "SKU / product code",
+      "type": "text",
+      "tier": 0,
+      "section": "Product",
+      "maxLength": 15,
+      "hint": "Leave blank to generate a code"
+    },
+    {
+      "key": "barcode",
+      "label": "Barcode",
+      "type": "text",
+      "tier": 0,
+      "section": "Product",
+      "maxLength": 15
+    },
+    {
+      "key": "category",
+      "label": "Category",
+      "type": "text",
+      "tier": 0,
+      "section": "Product",
+      "maxLength": 30
+    },
+    {
+      "key": "unit",
+      "label": "Stock unit",
+      "type": "text",
+      "tier": 0,
+      "section": "Product",
+      "default": "pc",
+      "maxLength": 10
+    },
+    {
+      "key": "selling_price",
+      "label": "Selling price",
+      "type": "money",
+      "tier": 0,
+      "section": "Pricing",
+      "default": "0.00"
+    },
+    {
+      "key": "cost_price",
+      "label": "Last purchase cost",
+      "type": "money",
+      "tier": 0,
+      "section": "Pricing",
+      "default": "0.00"
+    },
+    {
+      "key": "quantity",
+      "label": "Stock on hand",
+      "type": "integer",
+      "tier": 0,
+      "section": "Stock",
+      "default": 0,
+      "hint": "Whole units of the stock unit. Changes are recorded in stock history."
+    },
+    {
+      "key": "last_restocked",
+      "label": "Last restocked",
+      "type": "date",
+      "tier": 0,
+      "section": "Stock"
+    },
+    {
+      "key": "supplier",
+      "label": "Primary supplier",
+      "type": "text",
+      "tier": 0,
+      "section": "Purchasing"
+    },
+    {
+      "key": "subcategory",
+      "label": "Subcategory",
+      "type": "text",
+      "tier": 1,
+      "section": "Product"
+    },
+    {
+      "key": "description",
+      "label": "Description",
+      "type": "text",
+      "tier": 1,
+      "section": "Product"
+    },
+    {
+      "key": "image_url",
+      "label": "Product image URL",
+      "type": "url",
+      "tier": 1,
+      "section": "Product"
+    },
+    {
+      "key": "reorder_level",
+      "label": "Reorder level",
+      "type": "integer",
+      "tier": 1,
+      "section": "Stock",
+      "default": 0
+    },
+    {
+      "key": "wholesale_price",
+      "label": "Wholesale price",
+      "type": "money",
+      "tier": 1,
+      "section": "Pricing"
+    },
+    {
+      "key": "expiry_date",
+      "label": "Expiry date",
+      "type": "date",
+      "tier": 1,
+      "section": "Stock"
+    },
+    {
+      "key": "units",
+      "label": "Unit conversions",
+      "type": "rows",
+      "tier": 1,
+      "section": "Units",
+      "fields": [
+        {
+          "key": "unit",
+          "label": "Unit",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "factor",
+          "label": "Stock units per unit",
+          "type": "decimal",
+          "positive": true,
+          "required": true
+        }
+      ]
+    },
+    {
+      "key": "batches",
+      "label": "Batches and lots",
+      "type": "rows",
+      "tier": 2,
+      "section": "Traceability",
+      "fields": [
+        {
+          "key": "lot",
+          "label": "Batch / lot",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "expiry",
+          "label": "Expiry date",
+          "type": "date"
+        },
+        {
+          "key": "quantity",
+          "label": "Quantity",
+          "type": "integer"
+        },
+        {
+          "key": "location",
+          "label": "Location",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "key": "cost_method",
+      "label": "Cost method",
+      "type": "select",
+      "tier": 2,
+      "section": "Pricing",
+      "options": [
+        "weighted_average",
+        "fifo"
+      ],
+      "default": "weighted_average",
+      "hint": "Valuation policy recorded for reporting. Does not recost historical sales."
+    },
+    {
+      "key": "location",
+      "label": "Shelf / bin location",
+      "type": "text",
+      "tier": 2,
+      "section": "Stock"
+    },
+    {
+      "key": "tax_category",
+      "label": "Tax classification",
+      "type": "select",
+      "tier": 2,
+      "section": "Pricing",
+      "options": [
+        "vat12",
+        "vat_exempt",
+        "zero_rated",
+        "non_vat"
+      ],
+      "default": "vat12"
+    },
+    {
+      "key": "price_tiers",
+      "label": "Price tiers",
+      "type": "rows",
+      "tier": 3,
+      "section": "Pricing",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Tier",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "minimum_quantity",
+          "label": "Minimum quantity",
+          "type": "integer",
+          "required": true
+        },
+        {
+          "key": "price",
+          "label": "Unit price",
+          "type": "money",
+          "required": true
+        },
+        {
+          "key": "effective_from",
+          "label": "Effective from",
+          "type": "date"
+        },
+        {
+          "key": "effective_to",
+          "label": "Effective to",
+          "type": "date"
+        }
+      ]
+    },
+    {
+      "key": "landed_costs",
+      "label": "Landed cost components",
+      "type": "rows",
+      "tier": 3,
+      "section": "Pricing",
+      "fields": [
+        {
+          "key": "name",
+          "label": "Freight / duties / handling",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "amount",
+          "label": "Amount per stock unit (PHP)",
+          "type": "money",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
