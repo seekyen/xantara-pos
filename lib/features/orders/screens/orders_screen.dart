@@ -10,6 +10,7 @@ import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../local/database_seed.dart';
 import '../../../shared/widgets/supervisor_authorization_dialog.dart';
+import 'return_dialog.dart';
 
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
@@ -24,7 +25,8 @@ class OrdersScreen extends ConsumerWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: Text('Order History', style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+        title: Text('Order History',
+            style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
         leading: const BackButton(color: AppColors.gray800),
       ),
       body: orders.isEmpty
@@ -184,6 +186,10 @@ class _OrderCard extends ConsumerWidget {
 
             const SizedBox(height: AppSizes.sm),
             const Divider(height: 1, color: AppColors.gray100),
+            OutlinedButton.icon(
+                onPressed: () => showReturnDialog(context, order.id),
+                icon: const Icon(Icons.assignment_return_outlined),
+                label: const Text('Returns / credit notes')),
             const SizedBox(height: AppSizes.sm),
 
             // ── Items ────────────────────────────────────────────────

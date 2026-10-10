@@ -6,6 +6,7 @@ import 'repositories/audit_trail_repository.dart';
 import 'repositories/bir_reporting_repository.dart';
 import 'repositories/catalog_repository.dart';
 import 'repositories/hardware_job_processor.dart';
+import 'repositories/loyalty_repository.dart';
 import 'repositories/offline_sale_repository.dart';
 import 'repositories/staff_auth_repository.dart';
 
@@ -16,6 +17,10 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 
 final offlineSaleRepositoryProvider = Provider<OfflineSaleRepository>(
   (ref) => OfflineSaleRepository(ref.watch(appDatabaseProvider)),
+);
+
+final loyaltyRepositoryProvider = Provider<LoyaltyRepository>(
+  (ref) => LoyaltyRepository(ref.watch(appDatabaseProvider)),
 );
 
 final catalogRepositoryProvider = Provider<CatalogRepository>(

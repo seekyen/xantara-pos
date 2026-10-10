@@ -77,9 +77,16 @@ Do not place a permanent API secret in a Flutter web build. Browser clients
 must obtain short-lived credentials through an authenticated enrollment or
 login flow.
 
-## Next increment
+## Catalog pull
 
-Add authenticated Flutter enrollment/login and a manual queue-drain action,
-then add a cursor-based pull endpoint for catalog and branch-inventory changes.
-The pull protocol needs explicit version and conflict rules before it is
-allowed to update local stock.
+After the authenticated Flutter client drains its durable outbound queue, it
+requests `GET /api/v1/inventory-items/?branch=MAIN` and atomically replaces its
+sellable MAIN catalog snapshot. This ordering ensures an unsent local sale is
+projected by Django before the authoritative quantity is read back. Products
+removed from the active server response are retained locally for invoice history
+but hidden from new sales. Invalid quantities, prices, tax categories, or
+duplicate SKUs reject the complete snapshot instead of partially changing Drift.
+
+This is a full authenticated snapshot pull. A future increment should add a
+cursor-based endpoint for incremental catalog and branch-inventory changes, plus
+dynamic branch enrollment beyond the currently registered device mappings.

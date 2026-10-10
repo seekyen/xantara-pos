@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database.dart';
+import 'journal_store.dart';
 
 class AuditVerificationResult {
   const AuditVerificationResult({
@@ -41,54 +42,64 @@ class AuditTrailRepository {
     required DateTime occurredAt,
     String? terminalId,
   }) async {
-    if (branchId.trim().isEmpty ||
-        actorId.trim().isEmpty ||
-        eventType.trim().isEmpty ||
-        entityType.trim().isEmpty ||
-        entityId.trim().isEmpty) {
-      throw ArgumentError('Audit identity fields cannot be empty.');
-    }
-    // Reject invalid JSON so equivalent readers can safely preserve the payload.
-    jsonDecode(payloadJson);
+    return database.transaction(() async {
+      if (branchId.trim().isEmpty ||
+          actorId.trim().isEmpty ||
+          eventType.trim().isEmpty ||
+          entityType.trim().isEmpty ||
+          entityId.trim().isEmpty) {
+        throw ArgumentError('Audit identity fields cannot be empty.');
+      }
+      // Reject invalid JSON so equivalent readers can safely preserve the payload.
+      jsonDecode(payloadJson);
 
-    final previous = await (database.select(database.auditEvents)
-          ..where((row) => row.branchId.equals(branchId))
-          ..orderBy([(row) => OrderingTerm.desc(row.sequence)])
-          ..limit(1))
-        .getSingleOrNull();
-    final sequence = (previous?.sequence ?? 0) + 1;
-    final previousHash = previous?.eventHash ?? genesisHash;
-    final normalizedTime = occurredAt.toUtc().toIso8601String();
-    final hash = _hash(
-      branchId: branchId,
-      sequence: sequence,
-      previousHash: previousHash,
-      terminalId: terminalId,
-      actorId: actorId.trim(),
-      eventType: eventType,
-      entityType: entityType,
-      entityId: entityId,
-      payloadJson: payloadJson,
-      normalizedTime: normalizedTime,
-    );
-    final id = _uuid.v4();
-    await database.into(database.auditEvents).insert(
-          AuditEventsCompanion.insert(
-            id: id,
-            branchId: branchId,
-            sequence: sequence,
-            previousHash: previousHash,
-            eventHash: hash,
-            terminalId: Value(terminalId),
-            actorId: actorId.trim(),
-            eventType: eventType,
-            entityType: entityType,
-            entityId: entityId,
-            payloadJson: payloadJson,
-            occurredAt: occurredAt,
-          ),
-        );
-    return id;
+      final previous = await (database.select(database.auditEvents)
+            ..where((row) => row.branchId.equals(branchId))
+            ..orderBy([(row) => OrderingTerm.desc(row.sequence)])
+            ..limit(1))
+          .getSingleOrNull();
+      final sequence = (previous?.sequence ?? 0) + 1;
+      final previousHash = previous?.eventHash ?? genesisHash;
+      // Drift stores DateTime as whole Unix seconds. Hash the persisted value.
+      final storedTime = DateTime.fromMillisecondsSinceEpoch(
+          (occurredAt.millisecondsSinceEpoch ~/ 1000) * 1000,
+          isUtc: true);
+      final normalizedTime = storedTime.toIso8601String();
+      final hash = _hash(
+        branchId: branchId,
+        sequence: sequence,
+        previousHash: previousHash,
+        terminalId: terminalId,
+        actorId: actorId.trim(),
+        eventType: eventType,
+        entityType: entityType,
+        entityId: entityId,
+        payloadJson: payloadJson,
+        normalizedTime: normalizedTime,
+      );
+      final id = _uuid.v4();
+      await database.into(database.auditEvents).insert(
+            AuditEventsCompanion.insert(
+              id: id,
+              branchId: branchId,
+              sequence: sequence,
+              previousHash: previousHash,
+              eventHash: hash,
+              terminalId: Value(terminalId),
+              actorId: actorId.trim(),
+              eventType: eventType,
+              entityType: entityType,
+              entityId: entityId,
+              payloadJson: payloadJson,
+              occurredAt: storedTime,
+            ),
+          );
+      final saved = await (database.select(database.auditEvents)
+            ..where((e) => e.id.equals(id)))
+          .getSingle();
+      await captureJournalDocument(database, saved);
+      return id;
+    });
   }
 
   Future<AuditVerificationResult> verifyBranch(String branchId) async {

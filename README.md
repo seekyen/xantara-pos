@@ -166,6 +166,31 @@ flutter run -d windows
 
 Other useful targets:
 
+For the optimized browser preview connected to the local Django backend, start
+the backend on port 8000, then run:
+
+```powershell
+.\scripts\start-local-preview.ps1
+```
+
+Open `http://127.0.0.1:8086/#/login`. API and media requests proxy to
+`http://127.0.0.1:8000`; this avoids cross-origin restrictions on sync headers.
+Port `8086` is the canonical local URL for the Flutter Xantara application.
+Sign in with the device's local POS account, then use **Settings → Cloud sync**
+to connect a local backend administrator. Backend accounts and offline POS
+accounts are separate. Sync uploads still require registered backend installation
+and branch mappings. No account or installation is created by the preview script.
+Backend credentials are stored separately from production credentials.
+
+In the Flutter app, open **Settings → App display**. **Mobile layout** limits
+the app to a phone-sized viewport on larger screens; turn it off for automatic
+screen sizing. Phones use the responsive layout automatically. The grocery
+register separates Items and Payment into tabs on narrow screens.
+
+On Windows, **Floating window** switches the whole POS to a compact, movable,
+resizable window. **Always on top** keeps it above other applications. These
+preferences are saved on the device and restored on startup.
+
 ```powershell
 flutter run -d chrome
 flutter run -d android
@@ -249,6 +274,14 @@ Deployment details are maintained in
 5. Update the relevant architecture document when a public contract changes.
 
 ## Repository Status Notes
+
+- [BIR pre-assessment package](docs/BIR_PRE_ASSESSMENT_PACKAGE_2026-10-10.md): proposed classification/scope, output matrix, evidence inventory and questions for preliminary RDO confirmation.
+
+- [Device and printer acceptance pack](docs/DEVICE_ACCEPTANCE_PACK.md): controlled target-device scenarios, evidence rules, reconciliation and sign-off gates.
+
+- [Linked cash credit notes](docs/CREDIT_NOTES.md): partial/full returns, supervisor authorization, selected restocking and linked cash/report adjustments.
+
+- [Senior/PWD workflow](docs/STATUTORY_DISCOUNTS.md): owner-configured eligibility, beneficiary evidence and supporting reports for F&B and Grocery/Retail.
 
 - `lib/` is the canonical Flutter application.
 - `build/`, `.dart_tool/`, `.tools/`, `output/`, and `tmp/` are generated or

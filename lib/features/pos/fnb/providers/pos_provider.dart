@@ -40,6 +40,8 @@ class Product {
   final Color color;
   final int stock;
   final bool isAvailable;
+  final int reorderPoint;
+  final String sku;
 
   const Product({
     required this.id,
@@ -49,6 +51,8 @@ class Product {
     required this.color,
     this.stock = 99,
     this.isAvailable = true,
+    this.reorderPoint = 0,
+    this.sku = '',
   });
 
   Product copyWith({
@@ -67,6 +71,8 @@ class Product {
       color: color ?? this.color,
       stock: stock ?? this.stock,
       isAvailable: isAvailable ?? this.isAvailable,
+      reorderPoint: reorderPoint,
+      sku: sku,
     );
   }
 }
@@ -82,7 +88,8 @@ const staticCategories = [
 /// Branch-scoped product catalog and stock, backed by [CatalogRepository]
 /// (Drift). Reactively re-subscribes whenever the active branch changes.
 class ProductsNotifier extends StateNotifier<List<Product>> {
-  ProductsNotifier(this._repository, {required this.branchId}) : super(const []) {
+  ProductsNotifier(this._repository, {required this.branchId})
+      : super(const []) {
     _subscription = _repository.watchBranchProducts(branchId).listen((rows) {
       state = rows.map(_toProduct).toList(growable: false);
     });
@@ -149,6 +156,8 @@ Product _toProduct(CatalogProduct row) => Product(
       color: Color(row.product.colorArgb),
       stock: row.inventory.stockOnHand,
       isAvailable: row.product.isActive,
+      reorderPoint: row.inventory.reorderPoint,
+      sku: row.product.sku,
     );
 
 final localPosStoreProvider = Provider<LocalPosStore>(
@@ -156,22 +165,30 @@ final localPosStoreProvider = Provider<LocalPosStore>(
 );
 
 class ActiveBranchNotifier extends StateNotifier<String> {
-  ActiveBranchNotifier(this._store) : super('MAIN') {
+  ActiveBranchNotifier(this._store, {this.singleBranch = false})
+      : super('MAIN') {
     restored = _restore();
   }
 
   static const storageKey = 'xantara.active-branch.v1';
   final LocalPosStore _store;
+  final bool singleBranch;
   late final Future<void> restored;
 
   Future<void> _restore() async {
     final saved = await _store.read(storageKey);
-    if (saved != null && retailBranches.any((branch) => branch.code == saved)) {
+    if (saved != null &&
+        (!singleBranch || saved == 'MAIN') &&
+        retailBranches.any((branch) => branch.code == saved)) {
       state = saved;
     }
   }
 
   Future<void> select(String branchCode) async {
+    if (singleBranch && branchCode != 'MAIN') {
+      throw StateError(
+          'This terminal is registered to the MAIN workspace branch.');
+    }
     if (!retailBranches.any((branch) => branch.code == branchCode)) {
       throw ArgumentError.value(branchCode, 'branchCode');
     }
@@ -182,8 +199,14 @@ class ActiveBranchNotifier extends StateNotifier<String> {
 
 final activeBranchProvider =
     StateNotifierProvider<ActiveBranchNotifier, String>(
-  (ref) => ActiveBranchNotifier(ref.watch(localPosStoreProvider)),
+  (ref) => ActiveBranchNotifier(ref.watch(localPosStoreProvider),
+      singleBranch: ref.watch(appDatabaseProvider).requireRegistration),
 );
+
+final availablePosBranchesProvider = Provider<List<RetailBranch>>((ref) =>
+    ref.watch(appDatabaseProvider).requireRegistration
+        ? [retailBranches.first]
+        : retailBranches);
 
 final productsProvider = StateNotifierProvider<ProductsNotifier, List<Product>>(
   (ref) => ProductsNotifier(

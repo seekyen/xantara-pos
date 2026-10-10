@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -6,9 +7,17 @@ import '../../auth/providers/auth_provider.dart';
 import '../../pos/fnb/providers/cart_provider.dart';
 import '../../pos/fnb/providers/pos_provider.dart';
 import '../providers/checkout_provider.dart';
+import '../../setup/company_setup_screen.dart';
+import '../providers/loyalty_provider.dart';
+import '../widgets/loyalty_customer_section.dart';
 import '../widgets/receipt_preview.dart';
+import '../widgets/invoice_buyer_fields.dart';
+import '../widgets/statutory_discount_fields.dart';
+import '../../../core/hardware/pos_hardware.dart';
 import '../../../core/auth/pos_authorization.dart';
 import '../../../core/payments/payment.dart';
+import '../../../core/pricing/commercial_discounts.dart';
+import '../../../core/compliance/bir_invoice.dart' show BirInvoiceCalculator;
 import '../../../local/database_providers.dart';
 import '../../../local/database_seed.dart';
 import '../../../local/repositories/offline_sale_repository.dart';
@@ -31,18 +40,62 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   final _promoController = TextEditingController();
   final _paymentReferenceController = TextEditingController();
+  final _cashReceivedController = TextEditingController();
   double _discount = 0;
   double _tendered = 0;
   bool _isProcessing = false;
+  final _buyer = InvoiceBuyerController();
+  StatutorySelection? _statutory;
+
+  void _selectStatutory(StatutorySelection? value) {
+    setState(() {
+      _statutory = value;
+      _tendered = 0;
+      _cashReceivedController.clear();
+    });
+    final windowId = ref.read(customerDisplayWindowIdProvider);
+    if (windowId == null) return;
+    final gross = ref.read(cartProvider).fold<int>(
+        0, (n, i) => n + (i.product.price * 100).round() * i.quantity);
+    final total =
+        value?.quote.totalCentavos ?? gross - (_discount * 100).round();
+    final tax = value == null
+        ? total - (total * 10000 / 11200).round()
+        : const BirInvoiceCalculator()
+            .summarize(value.quote.lines)
+            .vatAmountCentavos;
+    CustomerDisplayBridge.sendProceedToPayment(windowId,
+            subtotal: (gross - (value?.quote.vatReliefCentavos ?? 0)) / 100,
+            tax: tax / 100,
+            discount:
+                value == null ? _discount : value.quote.discountCentavos / 100,
+            total: total / 100)
+        .ignore();
+  }
 
   @override
   void dispose() {
     _promoController.dispose();
     _paymentReferenceController.dispose();
+    _cashReceivedController.dispose();
+    _buyer.dispose();
     super.dispose();
   }
 
   void _applyPromo() {
+    if (_statutory != null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Remove the statutory benefit before applying a promotion.')));
+      return;
+    }
+    if (ref.read(companyRegistrationProvider) != null) {
+      setState(() => _discount = 0);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Demo promotions are only available in the training workspace.')));
+      return;
+    }
     final code = _promoController.text.trim().toUpperCase();
     setState(() => _discount = code == 'DISC200' ? 200.0 : 0.0);
   }
@@ -60,8 +113,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   bool _canConfirm(double total) {
-    if (_selectedMethod == PaymentMethod.cash) return _tendered >= total;
-    return _paymentReferenceController.text.trim().isNotEmpty;
+    return _selectedMethod == PaymentMethod.cash &&
+        total > 0 &&
+        _buyer.error == null &&
+        _cashReceivedController.text.isNotEmpty &&
+        _tendered.isFinite &&
+        _tendered > 0 &&
+        (_tendered * 100).round() >= (total * 100).round();
   }
 
   void _showVoidDialog({
@@ -83,32 +141,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   List<OfflineSaleLineRequest> _buildSaleLines(List<CartItem> cartItems) {
-    var remainingDiscount = (_discount * 100).round();
+    final gross = {
+      for (final item in cartItems)
+        item.product.id: (item.product.price * 100).round() * item.quantity
+    };
+    final subtotal = gross.values.fold<int>(0, (s, v) => s + v);
+    final discounts = allocateCommercialDiscount(
+        gross, (_discount * 100).round().clamp(0, subtotal));
     return cartItems.map((item) {
       final unitPriceCentavos = (item.product.price * 100).round();
-      final gross = unitPriceCentavos * item.quantity;
-      final lineDiscount = remainingDiscount.clamp(0, gross);
-      remainingDiscount -= lineDiscount;
       return OfflineSaleLineRequest(
         productId: item.product.id,
         quantity: item.quantity,
-        discountCentavos: lineDiscount,
+        discountCentavos: discounts[item.product.id]!,
+        expectedUnitPriceCentavos: unitPriceCentavos,
       );
     }).toList(growable: false);
   }
 
   Future<void> _confirmPayment(List<CartItem> cartItems, double total) async {
-    if (_isProcessing) return;
+    if (_isProcessing || !_canConfirm(total)) return;
     setState(() => _isProcessing = true);
 
     // Only cash is wired to a real payment path today — see
     // docs/PAYMENT_ARCHITECTURE.md.
-    final cashReceived = _tendered > 0 ? _tendered : total;
+    final cashReceived = _tendered;
     final totalCentavos = (total * 100).round();
     final issuedAt = DateTime.now();
     final branchId = branchIdForCode(ref.read(activeBranchProvider));
-    final terminalId = terminalIdForBranch(branchId);
+    final company = ref.read(companyRegistrationProvider);
+    final terminalId = company?.terminalId ?? terminalIdForBranch(branchId);
     final actor = ref.read(authProvider).user;
+    final loyaltyCustomer = ref.read(selectedLoyaltyCustomerProvider);
+    String? committedNumber;
 
     try {
       if (actor == null) {
@@ -126,6 +191,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       final invoice = await ref.read(offlineSaleRepositoryProvider).issueSale(
             OfflineSaleRequest(
+              checkoutType: 'fnb',
+              demoPromotionCode: _discount > 0 ? 'DISC200' : null,
               branchId: branchId,
               terminalId: terminalId,
               actorId: actor.id,
@@ -138,9 +205,25 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               softwareName: trainingMerchantProfile.softwareName,
               softwareVersion: trainingMerchantProfile.softwareVersion,
               lines: _buildSaleLines(cartItems),
+              loyaltyCustomerId: loyaltyCustomer?.id,
+              buyer: _buyer.value,
+              statutoryClaim: _statutory?.claim,
             ),
           );
-      await drainHardwareJobQueue(ref.read(hardwareJobProcessorProvider));
+      committedNumber = invoice.invoiceNumber;
+      ref.read(cartProvider.notifier).clear();
+      ref.read(selectedLoyaltyCustomerProvider.notifier).state = null;
+      try {
+        await drainHardwareJobQueue(ref.read(hardwareJobProcessorProvider));
+      } catch (_) {
+        // The durable job remains for retry. A committed invoice is never a
+        // failed sale just because the hardware worker is unavailable.
+      }
+      final loyalty = loyaltyCustomer == null
+          ? null
+          : await ref
+              .read(loyaltyRepositoryProvider)
+              .loyaltyForInvoice(invoice.id);
 
       final order = buildOrder(
         id: invoice.id,
@@ -151,22 +234,39 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         cashReceived: cashReceived,
         birReceipt: birReceiptFromInvoice(invoice),
         paymentReference: payment.reference,
+        loyaltyNote: loyalty == null
+            ? null
+            : loyalty.estimatedPoints > 0
+                ? '${loyalty.customerName} earns about ${loyalty.estimatedPoints} pts (confirmed on sync)'
+                : loyalty.customerName,
       );
 
       ref.read(lastOrderProvider.notifier).state = order;
       ref.read(cartProvider.notifier).clear();
+      ref.read(selectedLoyaltyCustomerProvider.notifier).state = null;
       if (!mounted) return;
       Navigator.pop(context);
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => ReceiptPreview(order: order),
+        builder: (_) => ReceiptPreview(
+            order: order,
+            receipt: ReceiptPrintData(
+                invoice: invoice,
+                payment: payment,
+                cashierName: actor.name,
+                isReprint: false,
+                loyaltyCustomerName: loyalty?.customerName,
+                loyaltyEstimatedPoints: loyalty?.estimatedPoints ?? 0)),
       );
     } catch (error) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sale was not recorded: $error')),
+        SnackBar(
+            content: Text(committedNumber == null
+                ? 'Sale was not recorded: $error'
+                : 'Invoice $committedNumber was saved. Receipt display could not finish; check Order History. Do not repeat the sale.')),
       );
     }
   }
@@ -174,8 +274,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   @override
   Widget build(BuildContext context) {
     final cartItems = ref.watch(cartProvider);
-    final subtotal = cartItems.fold(0.0, (s, i) => s + i.subtotal);
-    final total = (subtotal - _discount).clamp(0.0, double.infinity);
+    final subtotal = cartItems.fold<int>(
+            0, (s, i) => s + (i.product.price * 100).round() * i.quantity) /
+        100;
+    final total = _statutory == null
+        ? (subtotal - _discount).clamp(0.0, double.infinity)
+        : _statutory!.quote.totalCentavos / 100;
     final totalCentavos = (total * 100).round();
     final vatableCentavos = (totalCentavos * 10000 / 11200).round();
     final vat = (totalCentavos - vatableCentavos) / 100;
@@ -184,10 +288,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     ref.listen<PaymentMethod?>(
       customerDisplayStateProvider.select((s) => s.selectedPaymentMethod),
       (_, method) {
-        if (method != null && _onPaymentPage) {
+        if (method == PaymentMethod.cash && _onPaymentPage && !_isProcessing) {
           setState(() {
-            _selectedMethod = method;
+            _selectedMethod = PaymentMethod.cash;
             _tendered = 0;
+            _cashReceivedController.clear();
           });
         }
       },
@@ -218,20 +323,54 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             Expanded(
               child: _onPaymentPage
                   ? _PaymentPage(
+                      buyerFields: Column(children: [
+                        StatutoryDiscountFields(
+                            checkoutType: 'fnb',
+                            quantities: {
+                              for (final i in cartItems)
+                                i.product.id: i.quantity
+                            },
+                            selection: _statutory,
+                            enabled: !_isProcessing,
+                            hasOtherDiscount: _discount > 0,
+                            onChanged: _selectStatutory),
+                        InvoiceBuyerFields(
+                            controller: _buyer,
+                            enabled: !_isProcessing,
+                            onChanged: () => setState(() {}))
+                      ]),
                       total: total,
                       selectedMethod: _selectedMethod,
                       tendered: _tendered,
                       tenderedOptions: _tenderedOptions(total),
                       paymentReferenceController: _paymentReferenceController,
+                      cashReceivedController: _cashReceivedController,
+                      isProcessing: _isProcessing,
+                      onCashChanged: (value) => setState(() {
+                        _tendered = double.tryParse(value) ?? 0;
+                      }),
                       canConfirm: !_isProcessing && _canConfirm(total),
-                      onBack: () => setState(() => _onPaymentPage = false),
+                      onBack: () => setState(() {
+                        _onPaymentPage = false;
+                        _statutory = null;
+                        _tendered = 0;
+                        _cashReceivedController.clear();
+                      }),
                       onMethodSelected: (m) => setState(() {
                         _selectedMethod = m;
                         _tendered = 0;
+                        _cashReceivedController.clear();
                         _paymentReferenceController.clear();
                       }),
                       onReferenceChanged: (_) => setState(() {}),
-                      onTenderedSelected: (t) => setState(() => _tendered = t),
+                      onTenderedSelected: (t) => setState(() {
+                        _tendered = t;
+                        _cashReceivedController.text = t.toStringAsFixed(2);
+                        _cashReceivedController.selection =
+                            TextSelection.collapsed(
+                          offset: _cashReceivedController.text.length,
+                        );
+                      }),
                       onConfirm: () => _confirmPayment(cartItems, total),
                       scrollController: controller,
                     )
@@ -265,8 +404,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         title: 'Clear Cart',
                         message:
                             'Clearing the cart requires supervisor permission.',
-                        onConfirmed: () =>
-                            ref.read(cartProvider.notifier).clear(),
+                        onConfirmed: () {
+                          ref.read(cartProvider.notifier).clear();
+                          ref
+                              .read(selectedLoyaltyCustomerProvider.notifier)
+                              .state = null;
+                        },
                       ),
                       onDecrement: (item) {
                         if (item.quantity == 1) {
@@ -431,8 +574,8 @@ class _CartPage extends StatelessWidget {
                           ),
                           const SizedBox(height: AppSizes.md),
                           Text('Cart is empty',
-                              style: AppTextStyles.labelMd
-                                  .copyWith(fontSize: 14)),
+                              style:
+                                  AppTextStyles.labelMd.copyWith(fontSize: 14)),
                           const SizedBox(height: 4),
                           Text('Add items from the product grid',
                               style: AppTextStyles.bodySm
@@ -457,8 +600,8 @@ class _CartPage extends StatelessWidget {
                   controller: promoController,
                   decoration: InputDecoration(
                     hintText: 'Promo code...',
-                    hintStyle: AppTextStyles.bodyMd
-                        .copyWith(color: AppColors.gray400),
+                    hintStyle:
+                        AppTextStyles.bodyMd.copyWith(color: AppColors.gray400),
                     prefixIcon: const Icon(Icons.search_rounded,
                         size: 18, color: AppColors.gray400),
                     filled: true,
@@ -500,6 +643,12 @@ class _CartPage extends StatelessWidget {
                 ],
 
                 const SizedBox(height: AppSizes.lg),
+
+                // ── Loyalty customer (optional) ──────────────────────
+                if (cartItems.isNotEmpty) ...[
+                  LoyaltyCustomerSection(total: total, vat: vat),
+                  const SizedBox(height: AppSizes.lg),
+                ],
 
                 // ── Summary card ──────────────────────────────────────
                 if (cartItems.isNotEmpty)
@@ -731,11 +880,15 @@ class _SummaryLine extends StatelessWidget {
 
 class _PaymentPage extends StatelessWidget {
   const _PaymentPage({
+    required this.buyerFields,
     required this.total,
     required this.selectedMethod,
     required this.tendered,
     required this.tenderedOptions,
     required this.paymentReferenceController,
+    required this.cashReceivedController,
+    required this.onCashChanged,
+    required this.isProcessing,
     required this.canConfirm,
     required this.onBack,
     required this.onMethodSelected,
@@ -746,10 +899,14 @@ class _PaymentPage extends StatelessWidget {
   });
 
   final double total;
+  final Widget buyerFields;
   final PaymentMethod selectedMethod;
   final double tendered;
   final List<_TenderedOption> tenderedOptions;
   final TextEditingController paymentReferenceController;
+  final TextEditingController cashReceivedController;
+  final ValueChanged<String> onCashChanged;
+  final bool isProcessing;
   final bool canConfirm;
   final VoidCallback onBack;
   final void Function(PaymentMethod) onMethodSelected;
@@ -760,7 +917,7 @@ class _PaymentPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final change = tendered - total;
+    final change = ((tendered * 100).round() - (total * 100).round()) / 100;
 
     return Column(
       children: [
@@ -773,7 +930,7 @@ class _PaymentPage extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.arrow_back_ios_new_rounded,
                     size: 18, color: AppColors.gray800),
-                onPressed: onBack,
+                onPressed: isProcessing ? null : onBack,
               ),
               const Text('Payment', style: AppTextStyles.titleLg),
             ],
@@ -816,6 +973,7 @@ class _PaymentPage extends StatelessWidget {
 
                 const SizedBox(height: AppSizes.lg),
 
+                buyerFields,
                 // Payment methods
                 const Text('PAYMENT METHOD', style: AppTextStyles.labelCaps),
                 const SizedBox(height: AppSizes.sm),
@@ -843,6 +1001,7 @@ class _PaymentPage extends StatelessWidget {
                         icon: Icons.attach_money_rounded,
                         label: 'Cash',
                         subtitle: 'Manual entry',
+                        enabled: !isProcessing,
                         selected: selectedMethod == PaymentMethod.cash,
                         onTap: () => onMethodSelected(PaymentMethod.cash),
                       ),
@@ -891,13 +1050,41 @@ class _PaymentPage extends StatelessWidget {
                   const SizedBox(height: AppSizes.lg),
                   const Text('TENDERED AMOUNT', style: AppTextStyles.labelCaps),
                   const SizedBox(height: AppSizes.sm),
+                  TextField(
+                    key: const ValueKey('fnb-cash-received'),
+                    controller: cashReceivedController,
+                    enabled: !isProcessing,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [
+                      TextInputFormatter.withFunction((oldValue, newValue) =>
+                          RegExp(r'^\d{0,9}(\.\d{0,2})?$')
+                                  .hasMatch(newValue.text)
+                              ? newValue
+                              : oldValue),
+                    ],
+                    onChanged: onCashChanged,
+                    decoration: InputDecoration(
+                      labelText: 'Cash received',
+                      prefixText: '₱ ',
+                      hintText: '0.00',
+                      helperText: cashReceivedController.text.isNotEmpty &&
+                              change < 0
+                          ? 'Still due: ₱${(-change).toStringAsFixed(2)}'
+                          : 'Type an amount or choose a quick amount below.',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: AppSizes.sm),
                   Wrap(
                     spacing: AppSizes.sm,
                     runSpacing: AppSizes.sm,
                     children: tenderedOptions.map((opt) {
                       final isSelected = tendered == opt.amount;
                       return GestureDetector(
-                        onTap: () => onTenderedSelected(opt.amount),
+                        onTap: isProcessing
+                            ? null
+                            : () => onTenderedSelected(opt.amount),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           padding: const EdgeInsets.symmetric(
@@ -934,7 +1121,7 @@ class _PaymentPage extends StatelessWidget {
                               .copyWith(color: AppColors.gray400)),
                       Text(
                         tendered >= total
-                            ? '₱${change.toStringAsFixed(0)}'
+                            ? '₱${change.toStringAsFixed(2)}'
                             : '—',
                         style: AppTextStyles.titleMd.copyWith(
                           color: tendered >= total
@@ -988,7 +1175,7 @@ class _PaymentPage extends StatelessWidget {
               onPressed: canConfirm ? onConfirm : null,
               icon: const Icon(Icons.check_rounded, size: 18),
               label: Text(
-                'Confirm Payment · ₱${total.toStringAsFixed(0)}',
+                'Confirm Payment · ₱${total.toStringAsFixed(2)}',
                 style: AppTextStyles.titleMd.copyWith(color: Colors.white),
               ),
               style: ElevatedButton.styleFrom(
@@ -1031,63 +1218,63 @@ class _PaymentMethodTile extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: GestureDetector(
-      onTap: enabled ? onTap : null,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSizes.screenH, vertical: AppSizes.md),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: selected
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : AppColors.gray100,
-                borderRadius: BorderRadius.circular(AppSizes.rInput),
+        onTap: enabled ? onTap : null,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSizes.screenH, vertical: AppSizes.md),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : AppColors.gray100,
+                  borderRadius: BorderRadius.circular(AppSizes.rInput),
+                ),
+                child: Icon(icon,
+                    color: selected ? AppColors.primary : AppColors.gray600,
+                    size: 18),
               ),
-              child: Icon(icon,
-                  color: selected ? AppColors.primary : AppColors.gray600,
-                  size: 18),
-            ),
-            const SizedBox(width: AppSizes.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: AppTextStyles.bodyLg.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color:
-                            selected ? AppColors.primary : AppColors.gray800),
-                  ),
-                  Text(subtitle,
-                      style: AppTextStyles.bodySm
-                          .copyWith(color: AppColors.gray400)),
-                ],
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                color: selected ? AppColors.primary : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? AppColors.primary : AppColors.gray200,
-                  width: 1.5,
+              const SizedBox(width: AppSizes.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AppTextStyles.bodyLg.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color:
+                              selected ? AppColors.primary : AppColors.gray800),
+                    ),
+                    Text(subtitle,
+                        style: AppTextStyles.bodySm
+                            .copyWith(color: AppColors.gray400)),
+                  ],
                 ),
               ),
-              child: selected
-                  ? const Icon(Icons.circle, color: Colors.white, size: 8)
-                  : null,
-            ),
-          ],
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.primary : Colors.transparent,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? AppColors.primary : AppColors.gray200,
+                    width: 1.5,
+                  ),
+                ),
+                child: selected
+                    ? const Icon(Icons.circle, color: Colors.white, size: 8)
+                    : null,
+              ),
+            ],
+          ),
         ),
-      ),
       ),
     );
   }
@@ -1157,8 +1344,8 @@ class _QrPhPanel extends StatelessWidget {
               const SizedBox(height: AppSizes.sm),
               Text(
                 '₱${total.toStringAsFixed(2)}',
-                style:
-                    AppTextStyles.displayMd.copyWith(color: AppColors.primaryDark),
+                style: AppTextStyles.displayMd
+                    .copyWith(color: AppColors.primaryDark),
               ),
             ],
           ),
@@ -1179,8 +1366,8 @@ class _QrPhPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Training QR only. Verify the ${method.label} payment independently, enter its reference, then confirm.',
-                  style: AppTextStyles.bodySm
-                      .copyWith(color: AppColors.primary),
+                  style:
+                      AppTextStyles.bodySm.copyWith(color: AppColors.primary),
                 ),
               ),
             ],

@@ -1,26 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
+import 'invoice_particulars_repository.dart';
+import 'business_profile_repository.dart';
+import 'statutory_discount_repository.dart';
+import '../../core/pricing/statutory_discount.dart';
 
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/compliance/bir_invoice.dart' as bir;
 import '../../core/hardware/pos_hardware.dart';
+import '../../core/loyalty/loyalty_points.dart';
 import '../../core/payments/payment.dart';
 import '../database.dart';
 import 'audit_trail_repository.dart';
 import 'invoice_assembler.dart';
+import 'loyalty_repository.dart';
+import 'company_registration_repository.dart';
+import '../../core/auth/pos_authorization.dart';
 
 class OfflineSaleLineRequest {
   const OfflineSaleLineRequest({
     required this.productId,
     required this.quantity,
     this.discountCentavos = 0,
+    this.expectedUnitPriceCentavos,
   });
 
   final String productId;
   final int quantity;
   final int discountCentavos;
+  final int? expectedUnitPriceCentavos;
 }
 
 class OfflineSaleRequest {
@@ -38,6 +48,10 @@ class OfflineSaleRequest {
     required this.softwareVersion,
     required this.lines,
     this.buyer,
+    this.checkoutType,
+    this.demoPromotionCode,
+    this.statutoryClaim,
+    this.loyaltyCustomerId,
     this.printReceipt = true,
     this.openCashDrawer = true,
   });
@@ -55,6 +69,12 @@ class OfflineSaleRequest {
   final String softwareVersion;
   final List<OfflineSaleLineRequest> lines;
   final bir.BirBuyerDetails? buyer;
+  final String? checkoutType;
+  final String? demoPromotionCode;
+  final StatutoryClaim? statutoryClaim;
+
+  /// The Xantara Cloud customer id (from the synced customer list) this sale earns points for.
+  final String? loyaltyCustomerId;
   final bool printReceipt;
   final bool openCashDrawer;
 }
@@ -92,6 +112,50 @@ class OfflineSaleRepository {
   /// customer with Premium sync enabled.
   Future<bir.BirInvoice> issueSale(OfflineSaleRequest request) {
     return database.transaction(() async {
+      await BusinessProfileRepository(database)
+          .requireType(request.checkoutType);
+      final registration = await CompanyRegistrationRepository(database).read();
+      if (request.demoPromotionCode != null &&
+          (registration != null || database.requireRegistration)) {
+        throw StateError(
+            'Demo promotions cannot be used for registered company sales.');
+      }
+      if (database.requireRegistration && registration == null) {
+        throw StateError(
+            'Complete company and terminal registration before making sales.');
+      }
+      if (registration != null) {
+        if (!registration.isActive) {
+          throw StateError(
+              'The owner must activate this terminal in Settings → Company & terminal.');
+        }
+        if (request.terminalId != registration.terminalId ||
+            request.branchId != CompanyRegistration.branchId) {
+          throw StateError(
+              'Sales must use the registered branch and terminal.');
+        }
+        final actor = await (database.select(database.staffUsers)
+              ..where((u) => u.id.equals(request.actorId)))
+            .getSingleOrNull();
+        final access = await (database.select(database.staffBranchAccess)
+              ..where((a) =>
+                  a.staffUserId.equals(request.actorId) &
+                  a.branchId.equals(request.branchId)))
+            .getSingleOrNull();
+        if (actor == null || !actor.isActive || access == null) {
+          throw const AuthorizationException(
+              'This staff member cannot sell at this branch.');
+        }
+        const PosAuthorizationPolicy().require(
+            StaffPrincipal(
+                id: actor.id,
+                displayName: actor.displayName,
+                email: actor.emailNormalized,
+                role: StaffRole.values.byName(actor.role),
+                branchIds: {access.branchId}),
+            PosPermission.createSale,
+            branchId: request.branchId);
+      }
       final branch = await (database.select(database.branches)
             ..where((row) => row.id.equals(request.branchId)))
           .getSingleOrNull();
@@ -138,6 +202,12 @@ class OfflineSaleRepository {
         if (product == null || !product.isActive) {
           throw StateError('A sale item is missing or inactive.');
         }
+        if (requestedLine.expectedUnitPriceCentavos != null &&
+            requestedLine.expectedUnitPriceCentavos !=
+                product.unitPriceCentavos) {
+          throw StateError(
+              'The price of ${product.name} changed. Remove it from the cart and scan it again.');
+        }
         final inventory = await (database.select(database.branchInventories)
               ..where(
                 (row) =>
@@ -154,7 +224,14 @@ class OfflineSaleRepository {
         }
 
         final taxCategory = bir.TaxCategory.values
-            .where((value) => value.name == product.taxCategory)
+            .where((value) =>
+                value.name ==
+                switch (product.taxCategory) {
+                  'vat_exempt' => 'vatExempt',
+                  'zero_rated' => 'zeroRated',
+                  'non_vat' => 'nonVat',
+                  final value => value,
+                })
             .firstOrNull;
         if (taxCategory == null) {
           throw StateError('Invalid tax category for ${product.name}.');
@@ -173,29 +250,50 @@ class OfflineSaleRepository {
         );
       }
 
+      StatutoryQuote? statutory;
+      if (request.statutoryClaim != null) {
+        if (request.demoPromotionCode != null) {
+          throw StateError(
+              'Choose one benefit; promotions cannot be combined.');
+        }
+        statutory = await StatutoryDiscountRepository(database).quote(
+            claim: request.statutoryClaim!,
+            lines: invoiceLines,
+            registration:
+                registration?.registrationType ?? request.registrationType,
+            issuedAt: request.issuedAt,
+            checkoutType: request.checkoutType ?? '');
+      }
       final sequence = bir.BirInvoiceSequence(
-        branchCode: branch.code,
+        branchCode: registration?.branchCode ?? branch.code,
         terminalCode: terminal.code,
         nextSequence: storedSequence.nextValue,
       );
       final invoiceId = _uuid.v4();
+      final footer = <String, String>{
+        if (registration != null) 'ptuIssuedOn': registration.ptuIssuedOn,
+        ...await InvoiceParticularsRepository(database).footer(),
+      };
       final invoice = _issuer.issue(
         id: invoiceId,
         issuedAt: request.issuedAt,
         seller: bir.BirSellerProfile(
-          registeredName: request.sellerName,
-          tin: request.sellerTin,
-          branchCode: branch.code,
-          registeredAddress: request.sellerAddress,
-          registrationType: request.registrationType,
+          registeredName: registration?.registeredName ?? request.sellerName,
+          tin: registration?.tin ?? request.sellerTin,
+          branchCode: registration?.branchCode ?? branch.code,
+          registeredAddress: registration?.address ?? request.sellerAddress,
+          registrationType:
+              registration?.registrationType ?? request.registrationType,
           machineIdentificationNumber: terminal.machineIdentificationNumber,
           permitToUseNumber: terminal.permitToUseNumber,
           machineSerialNumber: terminal.machineSerialNumber,
           softwareName: request.softwareName,
           softwareVersion: request.softwareVersion,
+          invoiceFooter: Map.unmodifiable(footer),
         ),
         buyer: request.buyer,
-        lines: invoiceLines,
+        lines: statutory?.lines ?? invoiceLines,
+        statutoryDiscount: statutory?.snapshot ?? const {},
         sequence: sequence,
         paymentReference: request.payment.reference,
       );
@@ -238,6 +336,10 @@ class OfflineSaleRepository {
             ),
           );
 
+      final particulars = invoiceParticulars(invoice);
+      await database.customStatement(
+          'INSERT INTO invoice_particulars(invoice_id,data_json) VALUES(?,?)',
+          [invoice.id, jsonEncode(particulars)]);
       await database.into(database.payments).insert(
             PaymentsCompanion.insert(
               id: request.payment.id,
@@ -332,8 +434,17 @@ class OfflineSaleRepository {
         ),
       );
 
+      final loyalty = await _attachLoyaltyCustomer(invoice, request);
       final eventPayload = jsonEncode({
         'invoiceId': invoice.id,
+        if (invoice.statutoryDiscount.isNotEmpty)
+          'statutoryDiscount': invoice.statutoryDiscount,
+        if (request.demoPromotionCode != null)
+          'demoPromotionCode': request.demoPromotionCode,
+        'particularsHash': particularsHash(particulars,
+            name: invoice.buyer?.registeredName,
+            tin: invoice.buyer?.tin,
+            address: invoice.buyer?.address),
         'invoiceNumber': invoice.invoiceNumber,
         'branchId': branch.id,
         'terminalId': terminal.id,
@@ -355,11 +466,18 @@ class OfflineSaleRepository {
               'quantity': line.quantity,
               'unitPriceCentavos': line.unitPriceCentavos,
               'discountCentavos': line.discountCentavos,
+              if (line.vatReliefCentavos != 0)
+                'vatReliefCentavos': line.vatReliefCentavos,
               'taxCategory': line.taxCategory.name,
               'lineTotalCentavos': line.netCentavos,
             },
         ],
         'issuedAt': invoice.issuedAt.toUtc().toIso8601String(),
+        // The cloud awards the real points from these when the invoice syncs.
+        if (loyalty != null) ...{
+          'customerId': loyalty.customerId,
+          'customerName': loyalty.customerName,
+        },
       });
       await _audit.append(
         branchId: branch.id,
@@ -420,6 +538,49 @@ class OfflineSaleRepository {
     });
   }
 
+  /// Links the sale to a cached loyalty customer and stores the points estimate. Runs inside the
+  /// sale transaction, so an unknown customer aborts the whole sale instead of silently dropping
+  /// the customer. Returns null when the sale has no customer.
+  Future<InvoiceLoyaltyData?> _attachLoyaltyCustomer(
+    bir.BirInvoice invoice,
+    OfflineSaleRequest request,
+  ) async {
+    final customerId = request.loyaltyCustomerId?.trim();
+    if (customerId == null || customerId.isEmpty) return null;
+    final customer = await (database.select(database.loyaltyCustomers)
+          ..where((row) => row.id.equals(customerId)))
+        .getSingleOrNull();
+    if (customer == null) {
+      throw StateError(
+          'The selected customer is not on this device. Sync customers and try again.');
+    }
+    final promoRows = await (database.select(database.loyaltyPromos)
+          ..where((row) => row.isActive.equals(true)))
+        .get();
+    final estimate = estimateLoyaltyPoints(
+      netCentavos: invoice.totalCentavos - invoice.taxSummary.vatAmountCentavos,
+      issuedAt: invoice.issuedAt,
+      promos: promoRows.map((row) => row.toRule()),
+    );
+    final link = InvoiceLoyaltyCompanion.insert(
+      invoiceId: invoice.id,
+      customerId: customer.id,
+      customerName: customer.name,
+      estimatedPoints: estimate.points,
+      promoName: Value(estimate.promoName),
+      createdAt: request.issuedAt,
+    );
+    await database.into(database.invoiceLoyalty).insert(link);
+    return InvoiceLoyaltyData(
+      invoiceId: invoice.id,
+      customerId: customer.id,
+      customerName: customer.name,
+      estimatedPoints: estimate.points,
+      promoName: estimate.promoName,
+      createdAt: request.issuedAt,
+    );
+  }
+
   /// Reactively lists sales for a branch, most recent first. Re-emits on any
   /// invoice insert/update (issuance or void); lines/payments are read fresh
   /// per emission since they are only ever inserted once per invoice.
@@ -437,7 +598,9 @@ class OfflineSaleRepository {
               ..where((p) => p.invoiceId.equals(row.id)))
             .getSingle();
         records.add(SaleRecord(
-          invoice: assembleInvoice(row, lines),
+          invoice: assembleInvoice(row, lines,
+              particulars:
+                  await InvoiceParticularsRepository(database).read(row.id)),
           payment: assemblePayment(payment),
         ));
       }
@@ -516,6 +679,17 @@ class OfflineSaleRepository {
       }
       if (invoice.status != bir.InvoiceStatus.issued.name) {
         throw StateError('Only an issued invoice can be voided.');
+      }
+      if (request.voidedAt.isBefore(invoice.issuedAt)) {
+        throw ArgumentError(
+            'A void cannot be dated before its original invoice.');
+      }
+      if ((await database.customSelect(
+              'SELECT id FROM credit_notes WHERE invoice_id=? LIMIT 1',
+              variables: [Variable(invoice.id)]).get())
+          .isNotEmpty) {
+        throw StateError(
+            'This invoice has credit notes. Return only its remaining items.');
       }
 
       final lines = await (database.select(database.invoiceLines)

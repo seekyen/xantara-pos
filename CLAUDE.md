@@ -1,91 +1,53 @@
-# CLAUDE.md
+# Claude handoff — Xantara POS
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Before changing this repository, read `C:\Dev\Xantara-POS-project-knowledge.md`.
+It is the shared, authoritative handoff for the Flutter POS, Django backend, and
+Next.js admin frontend. Later numbered entries supersede older status text when
+the document records an evolution of the implementation.
 
-## Commands
+After any meaningful code, schema, configuration, API, security, setup,
+deployment, or architecture change, update that shared knowledge file in the same
+task. Keep it factual and include verification results. Code and tests remain the
+authority if documentation is stale.
 
-```bash
-# Run on device/emulator
-flutter run
+## Workspace map
 
-# Analyze for errors and warnings
-flutter analyze --no-fatal-infos
+- Flutter POS: `C:\Dev\Xantara-POS`
+- Django/MySQL API: `C:\Dev\xantara-web-backend`
+- Next.js admin: `C:\Dev\xantara-web-frontend`
+- Shared knowledge: `C:\Dev\Xantara-POS-project-knowledge.md`
 
-# Build APK (release)
-flutter build apk --release
+## Local services
 
-# Code generation (Drift, Riverpod, Freezed, JSON)
-dart run build_runner build --delete-conflicting-outputs
+- Flutter web preview: `http://127.0.0.1:8086` — this is the canonical and fixed
+  local Xantara POS port. `scripts\start-local-preview.ps1` builds and starts it.
+- Admin frontend: `http://127.0.0.1:3000`
+- Django API: `http://127.0.0.1:8000`
+- Local backend database: MySQL database `xantara_pos_db`
+- The 8086 preview proxies `/api/` and `/media/` to Django on port 8000.
 
-# Watch mode for code generation
-dart run build_runner watch --delete-conflicting-outputs
+## Current cross-application behavior
+
+- The Django/MySQL backend is the shared catalog, staff-directory, branch, and
+  store-settings source used by the admin frontend and Flutter cloud sync.
+- Flutter remains offline first with Drift/SQLite for sales, invoice numbering,
+  device staff credentials, stock operations, audit events, and durable queues.
+- Flutter uploads its durable sync queue before atomically downloading the
+  authenticated `MAIN` catalog from MySQL.
+- Web staff records and Flutter local login records are intentionally separate.
+- Fresh web deployments use the one-time `/setup` flow: company, main branch,
+  first administrator. Existing installations are marked complete by migration.
+- The local installation is `Xantara POS`, business ID `xantara`, and setup is
+  already complete. Port 8086 must remain the Flutter preview port.
+
+## Common commands
+
+```powershell
+.\.tools\flutter\bin\flutter.bat analyze
+.\.tools\flutter\bin\flutter.bat test
+.\scripts\start-local-preview.ps1
 ```
 
-There are no tests currently in this project.
-
-## Architecture
-
-**Xantara POS** — a Flutter offline-first point-of-sale app. Dart SDK `>=3.3.0`.
-
-### State management
-Riverpod (`flutter_riverpod: ^2.6.1`) using `StateNotifierProvider` and `StateProvider` throughout. No generated providers (`@riverpod`) — all providers are defined manually. Providers are watched in `ConsumerWidget` / `ConsumerStatefulWidget`.
-
-### Navigation
-GoRouter (`go_router: ^14.6.2`) with a single `appRouterProvider` in `lib/core/router/app_router.dart`. The router uses a `redirect` callback that gates all routes behind auth, and sends users to `/admin` (admin role) or `/cashier` (cashier role) after login.
-
-**Route map:**
-| Path | Screen | Who sees it |
-|------|--------|-------------|
-| `/` | SplashScreen | All |
-| `/login` | LoginScreen | Unauthenticated |
-| `/admin` | AdminDashboardScreen | Admin |
-| `/analytics` | AnalyticsScreen | Admin |
-| `/inventory` | InventoryScreen | Admin |
-| `/cashier` | CashierDashboardScreen | Cashier |
-| `/pos` | PosScreen | Both |
-| `/orders` | OrdersScreen | Both |
-| `/settings` | SettingsScreen | Both |
-
-### Role-based UX
-- **Admin** lands on `/admin` → has bottom tab bar (Dashboard / Analytics / Inventory) → can open `/pos`
-- **Cashier** lands on `/cashier` → clock in/out shift → can open `/pos`
-- Both roles share the same POS and Orders screens
-
-### Checkout flow
-`PosScreen` opens `CheckoutScreen` via `showModalBottomSheet`. `CheckoutScreen` is a two-page flow within a single `DraggableScrollableSheet`:
-1. **Cart page** — items, promo code (`DISC200` = ₱200 off), VAT (12%), summary
-2. **Payment page** — Credit/Debit Card (default), Cash (tendered amount + change), GCash/Maya (QR)
-
-`PaymentMethod` enum: `card`, `cash`, `qrph`. Void/remove actions require supervisor PIN (`voidPermissionCode = '1234'` in `orders_provider.dart`).
-
-### Key providers
-| Provider | File | Purpose |
-|----------|------|---------|
-| `authProvider` | `features/auth/providers/auth_provider.dart` | Current user + login/logout. Static users only (no backend yet) |
-| `cartProvider` | `features/pos/providers/cart_provider.dart` | In-memory cart items |
-| `ordersProvider` | `features/orders/providers/orders_provider.dart` | Session-scoped order history + void |
-| `productsProvider` | `features/pos/providers/pos_provider.dart` | Product catalogue + stock |
-| `shiftProvider` | `features/cashier/providers/shift_provider.dart` | Clock-in/out state |
-| `shiftOrdersProvider` | same file | Orders placed after current clock-in |
-| `syncProvider` | `shared/providers/sync_provider.dart` | Sync status (synced / syncing / offline) |
-| `connectivityProvider` | `core/network/connectivity.dart` | `StreamProvider<bool>` from connectivity_plus |
-| `themeModeProvider` | `features/settings/providers/settings_provider.dart` | Light/dark/system theme |
-| `biometricEnabledProvider` | `shared/providers/biometric_provider.dart` | Biometric login toggle (shared_preferences) |
-
-### Design tokens
-All UI constants live in `lib/core/constants/`:
-- `AppColors` — brand, status, neutral scale, dark theme, white overlays, payment brand colors
-- `AppSizes` — 8pt spacing grid (`xs/sm/md/lg/xl/xxl`), border radii, button height
-- `AppShadows` — `sm`, `md`, `lg` shadow lists
-- `AppTextStyles` — `heroNumber`, `statNumber`, `body`, `caption`
-
-Always use these instead of hardcoded values. `AppColors.gray50` is the standard screen background.
-
-### Data persistence
-`lib/local/` contains a Drift database schema (`database.dart`) and DAOs for orders, products, and config — but the database file is currently empty (1 line). All runtime state is in-memory Riverpod providers. The `dio` client and `api_client.dart` are scaffolded but not wired to any live backend.
-
-### Admin dashboard stats
-The admin dashboard computes Net Sales / Orders / Avg Order from `ordersProvider` (filters `isVoided`). The analytics screen (`/analytics`) uses private derived providers defined at the top of `analytics_screen.dart` — `_netSalesProvider`, `_transactionCountProvider`, `_topProductsProvider`, `_paymentBreakdownProvider`.
-
-### Biometric login
-`BiometricService` in `shared/services/biometric_service.dart` uses `local_auth`. Credentials are stored in `shared_preferences`. On Android, `FlutterFragmentActivity` is required in `MainActivity.kt`.
+Tests exist and are required for material behavior changes. Preserve invoice
+immutability, integer money, branch-scoped inventory, atomic business operations,
+explicit authorization, offline operation, and safe handling of secrets.

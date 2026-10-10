@@ -20,6 +20,7 @@ class BirSellerProfile {
     required this.machineSerialNumber,
     required this.softwareName,
     required this.softwareVersion,
+    this.invoiceFooter = const {},
   });
 
   final String registeredName;
@@ -32,6 +33,7 @@ class BirSellerProfile {
   final String machineSerialNumber;
   final String softwareName;
   final String softwareVersion;
+  final Map<String, String> invoiceFooter;
 
   List<String> validate() {
     final errors = <String>[];
@@ -65,11 +67,49 @@ class BirBuyerDetails {
     required this.registeredName,
     this.tin,
     this.address,
+    this.isBusiness = false,
   });
 
   final String registeredName;
   final String? tin;
   final String? address;
+  final bool isBusiness;
+
+  List<String> validate() {
+    final errors = <String>[];
+    if (registeredName.trim().isEmpty) errors.add('Enter the buyer name.');
+    if (isBusiness && (address?.trim().isEmpty ?? true)) {
+      errors.add('Enter the buyer registered address.');
+    }
+    final value = tin?.trim() ?? '';
+    if (isBusiness && value.isEmpty) errors.add('Enter the buyer TIN.');
+    if (value.isNotEmpty &&
+        (!RegExp(r'^[0-9 -]+$').hasMatch(value) ||
+            ![9, 12, 14]
+                .contains(value.replaceAll(RegExp(r'[^0-9]'), '').length))) {
+      errors.add(
+          'Enter a 9-digit TIN, optionally with a 3- or 5-digit branch code.');
+    }
+    for (final text in [registeredName, value, address ?? '']) {
+      if (RegExp(r'[\x00-\x1f\x7f]').hasMatch(text)) {
+        errors.add(
+            'Buyer details must not contain line breaks or control characters.');
+        break;
+      }
+    }
+    if (registeredName.length > 200 ||
+        value.length > 30 ||
+        (address?.length ?? 0) > 400) {
+      errors.add('Buyer details are too long.');
+    }
+    return errors;
+  }
+
+  BirBuyerDetails normalized() => BirBuyerDetails(
+      registeredName: registeredName.trim(),
+      tin: tin?.trim(),
+      address: address?.trim(),
+      isBusiness: isBusiness);
 }
 
 class BirInvoiceLine {
@@ -80,6 +120,7 @@ class BirInvoiceLine {
     required this.unitPriceCentavos,
     required this.taxCategory,
     this.discountCentavos = 0,
+    this.vatReliefCentavos = 0,
   })  : assert(quantity > 0),
         assert(unitPriceCentavos >= 0),
         assert(discountCentavos >= 0);
@@ -89,10 +130,11 @@ class BirInvoiceLine {
   final int quantity;
   final int unitPriceCentavos;
   final int discountCentavos;
+  final int vatReliefCentavos;
   final TaxCategory taxCategory;
 
   int get grossCentavos => quantity * unitPriceCentavos;
-  int get netCentavos => grossCentavos - discountCentavos;
+  int get netCentavos => grossCentavos - discountCentavos - vatReliefCentavos;
 
   List<String> validate() {
     final errors = <String>[];
@@ -101,7 +143,11 @@ class BirInvoiceLine {
     if (quantity <= 0) errors.add('Quantity must be greater than zero.');
     if (unitPriceCentavos < 0) errors.add('Unit price cannot be negative.');
     if (discountCentavos < 0) errors.add('Discount cannot be negative.');
-    if (discountCentavos > grossCentavos) {
+    if (vatReliefCentavos < 0 ||
+        (vatReliefCentavos > 0 && taxCategory != TaxCategory.vatExempt)) {
+      errors.add('VAT relief requires an exempt line and cannot be negative.');
+    }
+    if (discountCentavos + vatReliefCentavos > grossCentavos) {
       errors.add('Discount cannot exceed the line gross amount.');
     }
     return errors;
@@ -139,6 +185,7 @@ class BirInvoice {
     this.voidedAt,
     this.voidReason,
     this.originalInvoiceId,
+    this.statutoryDiscount = const {},
   });
 
   final String id;
@@ -154,6 +201,7 @@ class BirInvoice {
   final DateTime? voidedAt;
   final String? voidReason;
   final String? originalInvoiceId;
+  final Map<String, dynamic> statutoryDiscount;
 
   BirInvoice voidInvoice({
     required DateTime at,
@@ -179,6 +227,7 @@ class BirInvoice {
       voidedAt: at,
       voidReason: reason.trim(),
       originalInvoiceId: originalInvoiceId,
+      statutoryDiscount: statutoryDiscount,
     );
   }
 }
@@ -249,9 +298,11 @@ class BirInvoiceIssuer {
     required BirInvoiceSequence sequence,
     required String paymentReference,
     BirBuyerDetails? buyer,
+    Map<String, dynamic> statutoryDiscount = const {},
   }) {
     final errors = <String>[
       ...seller.validate(),
+      ...?buyer?.validate(),
       for (final line in lines) ...line.validate(),
     ];
     if (id.trim().isEmpty) errors.add('Invoice ID is required.');
@@ -282,12 +333,13 @@ class BirInvoiceIssuer {
       invoiceNumber: sequence.allocate(),
       issuedAt: issuedAt,
       seller: seller,
-      buyer: buyer,
+      buyer: buyer?.normalized(),
       lines: immutableLines,
       taxSummary: calculator.summarize(immutableLines),
       totalCentavos: total,
       status: InvoiceStatus.issued,
       paymentReference: paymentReference.trim(),
+      statutoryDiscount: statutoryDiscount,
     );
   }
 }

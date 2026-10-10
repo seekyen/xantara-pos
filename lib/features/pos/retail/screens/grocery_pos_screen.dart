@@ -22,6 +22,7 @@ class GroceryPosScreen extends ConsumerStatefulWidget {
 }
 
 class _GroceryPosScreenState extends ConsumerState<GroceryPosScreen> {
+  bool _dialogOpen = false;
   final _scanPanelKey = GlobalKey<GroceryScanPanelState>();
 
   @override
@@ -39,7 +40,7 @@ class _GroceryPosScreenState extends ConsumerState<GroceryPosScreen> {
   // Global handler (not focus-chain dependent) so F1-F5 work even while the
   // barcode/coupon/discount fields hold text focus.
   bool _handleKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
+    if (event is! KeyDownEvent || _dialogOpen) return false;
     switch (event.logicalKey) {
       case LogicalKeyboardKey.f1:
         _selectMethod(GroceryPaymentMethod.cash);
@@ -62,6 +63,7 @@ class _GroceryPosScreenState extends ConsumerState<GroceryPosScreen> {
   }
 
   void _onScan(String code, int quantity) {
+    if (_dialogOpen) return;
     final product = findGroceryProductByCode(ref, code);
     _scanPanelKey.currentState?.reportScanResult(code, product);
     if (product != null) {
@@ -70,22 +72,68 @@ class _GroceryPosScreenState extends ConsumerState<GroceryPosScreen> {
   }
 
   void _selectMethod(GroceryPaymentMethod method) {
+    if (_dialogOpen) return;
+    if (method != GroceryPaymentMethod.cash) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Electronic payments require a configured gateway.')));
+      return;
+    }
     ref.read(groceryPaymentMethodProvider.notifier).state = method;
     if (method == GroceryPaymentMethod.cash) _openPaymentDialog();
   }
 
   Future<void> _openPaymentDialog() async {
+    if (_dialogOpen) return;
     final amountDue = ref.read(groceryFinalTotalProvider);
     if (amountDue <= 0) return;
-    final receipt = await showGroceryPaymentDialog(context, amountDue: amountDue);
-    if (receipt != null && mounted) {
-      await showGroceryReceiptDialog(context, receipt);
+    _dialogOpen = true;
+    try {
+      final receipt =
+          await showGroceryPaymentDialog(context, amountDue: amountDue);
+      if (receipt != null && mounted) {
+        await showGroceryReceiptDialog(context, receipt);
+      }
+    } finally {
+      _dialogOpen = false;
+      _scanPanelKey.currentState?.focusBarcodeField();
     }
-    _scanPanelKey.currentState?.focusBarcodeField();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          backgroundColor: AppColors.gray50,
+          appBar: AppBar(
+            title: const Text('Grocery POS'),
+            bottom: const TabBar(tabs: [
+              Tab(text: 'Items', icon: Icon(Icons.shopping_cart_outlined)),
+              Tab(text: 'Payment', icon: Icon(Icons.payments_outlined)),
+            ]),
+          ),
+          body: SafeArea(
+            child: TabBarView(children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSizes.sm),
+                child: Column(children: [
+                  const Expanded(child: GroceryItemList()),
+                  GroceryScanPanel(key: _scanPanelKey, onScan: _onScan),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(AppSizes.sm),
+                child: GroceryPaymentPanel(
+                  onCharge: _openPaymentDialog,
+                  onSelectMethod: _selectMethod,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.gray50,
       appBar: AppBar(

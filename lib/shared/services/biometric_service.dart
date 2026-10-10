@@ -2,11 +2,13 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class BiometricService {
+  BiometricService({this.scope = ''});
+  final String scope;
   static final _auth = LocalAuthentication();
 
-  static const _keyEnabled = 'bio_enabled';
-  static const _keyEmail = 'bio_email';
-  static const _keyPassword = 'bio_password';
+  String get _keyEnabled => '${scope.isEmpty ? '' : '$scope:'}bio_enabled';
+  String get _keyEmail => '${scope.isEmpty ? '' : '$scope:'}bio_email';
+  String get _keyPassword => '${scope.isEmpty ? '' : '$scope:'}bio_password';
 
   Future<bool> isAvailable() async {
     try {

@@ -72,7 +72,8 @@ class ImprovementsLabScreen extends ConsumerWidget {
             child: DropdownButtonFormField<String>(
               initialValue: branch,
               decoration: const InputDecoration(labelText: 'Viewing branch'),
-              items: retailBranches
+              items: ref
+                  .watch(availablePosBranchesProvider)
                   .map((item) => DropdownMenuItem(
                       value: item.code, child: Text(item.name)))
                   .toList(),

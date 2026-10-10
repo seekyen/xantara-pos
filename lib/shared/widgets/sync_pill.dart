@@ -35,28 +35,26 @@ class _SyncStatusPillState extends State<SyncStatusPill>
     final s = widget.state.status;
 
     final bg = switch (s) {
-      SyncStatus.synced   => AppColors.successLight,
+      SyncStatus.synced => AppColors.successLight,
       SyncStatus.complete => AppColors.successLight,
-      SyncStatus.syncing  => AppColors.warningLight,
-      SyncStatus.offline  => AppColors.errorLight,
+      SyncStatus.syncing => AppColors.warningLight,
+      SyncStatus.offline => AppColors.errorLight,
     };
     final dotColor = switch (s) {
-      SyncStatus.synced   => AppColors.success,
+      SyncStatus.synced => AppColors.success,
       SyncStatus.complete => AppColors.success,
-      SyncStatus.syncing  => AppColors.warning,
-      SyncStatus.offline  => AppColors.error,
+      SyncStatus.syncing => AppColors.warning,
+      SyncStatus.offline => AppColors.error,
     };
     final label = switch (s) {
-      SyncStatus.synced   => 'Synced',
+      SyncStatus.synced => 'Synced',
       SyncStatus.complete =>
-        'Sync complete · ${widget.state.queued} uploaded',
-      SyncStatus.syncing  => 'Syncing…',
-      SyncStatus.offline  =>
-        'Offline · ${widget.state.queued} queued',
+        'Sync complete · ${widget.state.queued} uploaded · ${widget.state.downloaded} items',
+      SyncStatus.syncing => 'Syncing…',
+      SyncStatus.offline => 'Offline · ${widget.state.queued} queued',
     };
 
-    final isBlinking =
-        s == SyncStatus.syncing || s == SyncStatus.offline;
+    final isBlinking = s == SyncStatus.syncing || s == SyncStatus.offline;
 
     return Container(
       padding: const EdgeInsets.symmetric(

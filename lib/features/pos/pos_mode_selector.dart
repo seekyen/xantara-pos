@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../business_profiles/business_profile_providers.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
@@ -29,6 +31,12 @@ Future<PosBusinessMode?> showPosModeSelectorDialog(BuildContext context) {
 /// Shows the mode selector and navigates to the matching POS screen (or the
 /// coming-soon placeholder for modes without a dedicated UI yet).
 Future<void> openPos(BuildContext context) async {
+  final container = ProviderScope.containerOf(context, listen: false);
+  if (container.read(activeBusinessProfileProvider) != null) {
+    final type = container.read(businessCheckoutTypeProvider);
+    context.push(type?.route ?? '/business-profiles');
+    return;
+  }
   final mode = await showPosModeSelectorDialog(context);
   if (mode == null || !context.mounted) return;
   switch (mode) {
@@ -107,9 +115,12 @@ class _ModeOption extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(mode.label, style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w600)),
+                  Text(mode.label,
+                      style: AppTextStyles.bodyMd
+                          .copyWith(fontWeight: FontWeight.w600)),
                   Text(mode.subtitle,
-                      style: AppTextStyles.caption.copyWith(color: AppColors.gray600)),
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.gray600)),
                 ],
               ),
             ),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'invoice_particulars_repository.dart';
 import 'dart:math';
 
 import 'package:drift/drift.dart';
@@ -160,16 +161,23 @@ class HardwareJobProcessor {
     final paymentRow = await (database.select(database.payments)
           ..where((row) => row.invoiceId.equals(invoiceRow.id)))
         .getSingle();
+    final loyalty = await (database.select(database.invoiceLoyalty)
+          ..where((row) => row.invoiceId.equals(invoiceRow.id)))
+        .getSingleOrNull();
     final payload = jsonDecode(job.payloadJson) as Map<String, dynamic>;
 
     final reprintedAtRaw = payload['reprintedAt'] as String?;
     return ReceiptPrintData(
-      invoice: assembleInvoice(invoiceRow, lineRows),
+      invoice: assembleInvoice(invoiceRow, lineRows,
+          particulars:
+              await InvoiceParticularsRepository(database).read(invoiceRow.id)),
       payment: assemblePayment(paymentRow),
       cashierName: payload['cashierName'] as String? ?? 'Unknown',
       isReprint: payload['isReprint'] as bool? ?? false,
       reprintedAt:
           reprintedAtRaw == null ? null : DateTime.parse(reprintedAtRaw),
+      loyaltyCustomerName: loyalty?.customerName,
+      loyaltyEstimatedPoints: loyalty?.estimatedPoints ?? 0,
     );
   }
 }

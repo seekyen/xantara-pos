@@ -48,6 +48,14 @@ void main() {
     expect(result.eventsChecked, 2);
   });
 
+  test('fractional timestamps verify after database storage', () async {
+    await _append(audit,
+        branchId: 'branch-1',
+        entityId: 'invoice-1',
+        at: now.add(const Duration(milliseconds: 123, microseconds: 456)));
+    expect((await audit.verifyBranch('branch-1')).isValid, isTrue);
+  });
+
   test('detects content tampering', () async {
     await _append(audit, branchId: 'branch-1', entityId: 'invoice-1', at: now);
     await (database.update(database.auditEvents)).write(

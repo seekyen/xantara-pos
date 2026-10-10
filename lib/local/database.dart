@@ -1,4 +1,11 @@
 import 'package:drift/drift.dart';
+import 'fiscal_reading_schema.dart';
+import 'cash_drawer_schema.dart';
+import 'journal_schema.dart';
+import 'invoice_particulars_schema.dart';
+import 'business_profile_schema.dart';
+import 'statutory_schema.dart';
+import 'credit_note_schema.dart';
 
 part 'database.g.dart';
 
@@ -65,6 +72,8 @@ class StaffBranchAccess extends Table {
 }
 
 class Products extends Table {
+  TextColumn get inventoryProfileJson =>
+      text().withDefault(const Constant('{}'))();
   TextColumn get id => text()();
   TextColumn get sku => text().unique()();
   TextColumn get name => text()();
@@ -84,6 +93,8 @@ class Products extends Table {
 }
 
 class BranchInventories extends Table {
+  TextColumn get inventoryDetailsJson =>
+      text().withDefault(const Constant('{}'))();
   TextColumn get branchId => text().references(Branches, #id)();
   TextColumn get productId => text().references(Products, #id)();
   IntColumn get stockOnHand => integer().withDefault(const Constant(0))();
@@ -322,6 +333,65 @@ class SupplierDeliveryJobs extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+class InventoryChanges extends Table {
+  TextColumn get id => text()();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get branchId => text().references(Branches, #id)();
+  TextColumn get actorId => text()();
+  TextColumn get reason => text()();
+  TextColumn get beforeJson => text()();
+  TextColumn get afterJson => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Customers downloaded from Xantara Cloud so a cashier can attach one to a sale while offline.
+/// A replaceable cache: `points` is the balance as of the last sync, not a ledger.
+class LoyaltyCustomers extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get phone => text().withDefault(const Constant(''))();
+  TextColumn get email => text().nullable()();
+  IntColumn get points => integer().withDefault(const Constant(0))();
+  DateTimeColumn get syncedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Promo periods (with their own spend-per-point rate) cached from Xantara Cloud. Dates are
+/// Manila calendar days as `yyyy-MM-dd`, both inclusive.
+class LoyaltyPromos extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get startDate => text()();
+  TextColumn get endDate => text()();
+  IntColumn get spendPerPointCentavos => integer()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get syncedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// Which customer a sale was attached to. Kept apart from [Invoices] so the immutable BIR
+/// invoice row is untouched. `estimatedPoints` is only the cashier-facing estimate; the cloud
+/// awards the real points when the invoice syncs. No foreign key to [LoyaltyCustomers], which
+/// is a cache that is replaced on every sync.
+class InvoiceLoyalty extends Table {
+  TextColumn get invoiceId => text().references(Invoices, #id)();
+  TextColumn get customerId => text()();
+  TextColumn get customerName => text()();
+  IntColumn get estimatedPoints => integer()();
+  TextColumn get promoName => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {invoiceId};
+}
+
 @DriftDatabase(
   tables: [
     Branches,
@@ -342,20 +412,66 @@ class SupplierDeliveryJobs extends Table {
     SupplierConnectors,
     SupplierProductSubscriptions,
     SupplierDeliveryJobs,
+    InventoryChanges,
+    LoyaltyCustomers,
+    LoyaltyPromos,
+    InvoiceLoyalty,
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(super.executor);
+  AppDatabase(super.executor,
+      {this.requireRegistration = false, this.requireBusinessProfile = false});
+
+  final bool requireRegistration;
+  final bool requireBusinessProfile;
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (migrator) async {
           await migrator.createAll();
+          await createBusinessProfileSchema((sql) => customStatement(sql));
+          await createStatutorySchema((sql) => customStatement(sql));
+          await _createRegistrationTable();
+          await createFiscalReadingSchema((sql) => customStatement(sql));
+          await createCashDrawerSchema((sql) => customStatement(sql));
+          await createJournalSchema((sql) => customStatement(sql));
+          await createInvoiceParticularsSchema((sql) => customStatement(sql));
+          await createCreditNoteSchema((sql) => customStatement(sql));
         },
         onUpgrade: (migrator, from, to) async {
+          if (from < 12) {
+            await createStatutorySchema((sql) => customStatement(sql));
+          }
+          if (from < 11) {
+            await createBusinessProfileSchema((sql) => customStatement(sql));
+          }
+          if (from < 10) {
+            await createInvoiceParticularsSchema((sql) => customStatement(sql));
+          }
+          if (from < 9) {
+            await createJournalSchema((sql) => customStatement(sql));
+          }
+          if (from < 7) {
+            await createFiscalReadingSchema((sql) => customStatement(sql));
+          }
+          if (from < 8) {
+            await createCashDrawerSchema((sql) => customStatement(sql));
+          }
+          if (from < 6) await _createRegistrationTable();
+          if (from < 5) {
+            await migrator.createTable(loyaltyCustomers);
+            await migrator.createTable(loyaltyPromos);
+            await migrator.createTable(invoiceLoyalty);
+          }
+          if (from < 4) {
+            await migrator.addColumn(products, products.inventoryProfileJson);
+            await migrator.addColumn(
+                branchInventories, branchInventories.inventoryDetailsJson);
+            await migrator.createTable(inventoryChanges);
+          }
           if (from < 2) {
             await migrator.addColumn(products, products.categoryId);
             await migrator.addColumn(products, products.colorArgb);
@@ -363,11 +479,22 @@ class AppDatabase extends _$AppDatabase {
           if (from < 3) {
             await _replaceUntouchedTrainingInventory();
           }
+          if (from < 13) {
+            await createCreditNoteSchema((sql) => customStatement(sql));
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  // Explicit SQL keeps this singleton document independent of generated tables.
+  Future<void> _createRegistrationTable() => customStatement('''
+    CREATE TABLE company_registration (
+      id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),
+      profile_json TEXT NOT NULL
+    )
+  ''');
 
   Future<void> _replaceUntouchedTrainingInventory() async {
     final transactionalCounts = await Future.wait([
