@@ -112,7 +112,7 @@ class PosScreen extends ConsumerWidget {
               visualDensity: VisualDensity.compact,
             ),
           ),
-        if (user != null)
+        if (user != null && !isMobile)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSizes.sm),
             child: Row(
@@ -138,7 +138,8 @@ class PosScreen extends ConsumerWidget {
                 const SizedBox(width: AppSizes.xs),
                 Text(
                   user.name,
-                  style: AppTextStyles.bodyMd.copyWith(fontWeight: FontWeight.w500),
+                  style: AppTextStyles.bodyMd
+                      .copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
             ),

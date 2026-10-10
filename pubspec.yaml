@@ -71,6 +71,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/inventory_schema.json
 
 flutter_launcher_icons:
   android: true

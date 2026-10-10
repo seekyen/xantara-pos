@@ -7,11 +7,21 @@ import '../../auth/providers/auth_provider.dart';
 import '../../pos/fnb/providers/cart_provider.dart';
 import '../../cashier/providers/shift_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/store_settings_provider.dart';
+import '../providers/staff_directory_provider.dart';
+import '../providers/display_preferences.dart';
+import 'staff_directory_screen.dart';
+import 'statutory_settings_screen.dart';
+import '../../setup/company_setup_screen.dart';
+import '../../reports/terminal_readings_screen.dart';
+import '../../business_profiles/business_profiles_screen.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/providers/sync_provider.dart';
+import '../../../shared/providers/sync_target_provider.dart';
 import '../../../shared/providers/biometric_provider.dart';
+import '../../../shared/widgets/device_layout_selector.dart';
 
 final _packageInfoProvider = FutureProvider<PackageInfo>((ref) async {
   return PackageInfo.fromPlatform();
@@ -38,13 +48,30 @@ class SettingsScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(AppSizes.screenH),
         children: [
           const _ProfileCard(),
+          const BusinessProfilesTile(),
+          const SizedBox(height: AppSizes.md),
+          const CompanyRegistrationTile(),
+          const TerminalReadingsTile(),
+          Card(
+              child: ListTile(
+                  leading: const Icon(Icons.badge_outlined),
+                  title: const Text('Senior / PWD settings'),
+                  subtitle: const Text(
+                      'Product eligibility and beneficiary sales register'),
+                  onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                          builder: (_) => const StatutorySettingsScreen())))),
           const SizedBox(height: AppSizes.md),
           const _StoreSection(),
           const SizedBox(height: AppSizes.md),
           const _PreferencesSection(),
           const SizedBox(height: AppSizes.md),
+          const _DisplaySection(),
+          const SizedBox(height: AppSizes.md),
           if (isAdmin) ...[
             const _AppearanceSection(),
+            const SizedBox(height: AppSizes.md),
+            const _StaffDirectoryTile(),
             const SizedBox(height: AppSizes.md),
           ],
           const _CloudSyncTile(),
@@ -60,6 +87,69 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 // ── Profile card ──────────────────────────────────────────────────────────────
+
+class _DisplaySection extends ConsumerStatefulWidget {
+  const _DisplaySection();
+
+  @override
+  ConsumerState<_DisplaySection> createState() => _DisplaySectionState();
+}
+
+class _DisplaySectionState extends ConsumerState<_DisplaySection> {
+  bool _busy = false;
+
+  Future<void> _update(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Could not update display settings. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final display = ref.watch(displayPreferencesProvider);
+    final controller = ref.read(displayPreferencesProvider.notifier);
+    return _SectionCard(
+      title: 'App display',
+      icon: Icons.devices,
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: DeviceLayoutSelector(),
+        ),
+        if (supportsFloatingWindow) ...[
+          SwitchListTile(
+            title: const Text('Floating window'),
+            subtitle: const Text(
+                'Open the POS in a compact, movable Windows window.'),
+            value: display.floating,
+            onChanged: _busy
+                ? null
+                : (value) => _update(() => controller.setFloating(value)),
+          ),
+          SwitchListTile(
+            title: const Text('Always on top'),
+            subtitle: const Text('Keep the POS above other windows.'),
+            value: display.onTop,
+            onChanged: _busy
+                ? null
+                : (value) => _update(() => controller.setOnTop(value)),
+          ),
+        ],
+      ],
+    );
+  }
+}
 
 class _ProfileCard extends ConsumerWidget {
   const _ProfileCard();
@@ -172,42 +262,74 @@ class _StoreSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final branch = ref.watch(branchProvider);
-    final currency = ref.watch(currencyProvider);
+    final settings = ref.watch(storeSettingsProvider);
+
+    if (!settings.connected) {
+      return _SectionCard(
+        title: 'Store',
+        icon: Icons.store_outlined,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSizes.lg, vertical: AppSizes.md),
+            child: Text(
+              'Connect Xantara Cloud below to manage the store name, receipt '
+              'header, and currency shared with the admin dashboard.',
+              style: AppTextStyles.labelMd
+                  .copyWith(fontSize: 13, color: AppColors.gray400),
+            ),
+          ),
+        ],
+      );
+    }
 
     return _SectionCard(
       title: 'Store',
       icon: Icons.store_outlined,
       children: [
-        _NavTile(
-          label: 'Branch',
-          value: branch,
-          onTap: () => _editTextField(
-            context: context,
-            title: 'Branch',
-            current: branch,
-            onSave: (v) => ref.read(branchProvider.notifier).state = v,
+        if (settings.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSizes.lg, AppSizes.sm, AppSizes.lg, 0),
+            child: Text(settings.error!,
+                style: const TextStyle(color: AppColors.error, fontSize: 12)),
           ),
+        _NavTile(
+          label: 'Store Name',
+          value: settings.loading ? 'Loading…' : settings.storeName,
+          onTap: settings.loading
+              ? null
+              : () => _editTextField(
+                    context: context,
+                    title: 'Store Name',
+                    current: settings.storeName,
+                    onSave: (v) => ref
+                        .read(storeSettingsProvider.notifier)
+                        .updateStoreName(v),
+                  ),
         ),
         const Divider(height: 1, color: AppColors.gray100, indent: AppSizes.lg),
         _NavTile(
           label: 'Receipt Header',
           value: 'Edit',
-          onTap: () {
-            final current = ref.read(receiptHeaderProvider);
-            _editTextField(
-              context: context,
-              title: 'Receipt Header',
-              current: current,
-              onSave: (v) => ref.read(receiptHeaderProvider.notifier).state = v,
-            );
-          },
+          onTap: settings.loading
+              ? null
+              : () => _editTextField(
+                    context: context,
+                    title: 'Receipt Header',
+                    current: settings.receiptHeader,
+                    onSave: (v) => ref
+                        .read(storeSettingsProvider.notifier)
+                        .updateReceiptHeader(v),
+                  ),
         ),
         const Divider(height: 1, color: AppColors.gray100, indent: AppSizes.lg),
         _NavTile(
           label: 'Currency',
-          value: currency,
-          onTap: () => _pickCurrency(context, ref, currency),
+          value: settings.loading ? 'Loading…' : settings.currency,
+          onTap: settings.loading
+              ? null
+              : () => _pickCurrency(context, ref, settings.currency),
         ),
       ],
     );
@@ -217,68 +339,142 @@ class _StoreSection extends ConsumerWidget {
     required BuildContext context,
     required String title,
     required String current,
-    required ValueChanged<String> onSave,
+    required Future<void> Function(String) onSave,
   }) {
     final ctrl = TextEditingController(text: current);
+    var busy = false;
+    String? error;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title, style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (ctrl.text.trim().isNotEmpty) {
-                onSave(ctrl.text.trim());
-              }
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.rButton)),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text(title,
+                style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  enabled: !busy,
+                  decoration:
+                      const InputDecoration(border: OutlineInputBorder()),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: AppSizes.sm),
+                  Text(error!, style: const TextStyle(color: AppColors.error)),
+                ],
+              ],
             ),
-            child: const Text('Save'),
-          ),
-        ],
+            actions: [
+              TextButton(
+                  onPressed: busy ? null : () => Navigator.pop(context),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        if (ctrl.text.trim().isEmpty) return;
+                        setState(() {
+                          busy = true;
+                          error = null;
+                        });
+                        try {
+                          await onSave(ctrl.text.trim());
+                          if (context.mounted) Navigator.pop(context);
+                        } catch (err) {
+                          setState(() {
+                            busy = false;
+                            error = err.toString();
+                          });
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppSizes.rButton)),
+                ),
+                child: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
   void _pickCurrency(BuildContext context, WidgetRef ref, String current) {
-    const options = ['PHP', 'USD', 'EUR', 'SGD', 'JPY'];
+    // Restricted to PHP: it's the only currency the rest of the app (receipts,
+    // reports, the web dashboard) actually formats — this field is now shared
+    // with the web dashboard, so it shouldn't be set to a value nothing renders.
+    const options = ['PHP'];
+    var busy = false;
+    String? error;
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Currency',
-            style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: options
-              .map((opt) => ListTile(
-                    title: Text(opt),
-                    trailing: opt == current
-                        ? const Icon(Icons.check, color: AppColors.primary)
-                        : null,
-                    onTap: () {
-                      ref.read(currencyProvider.notifier).state = opt;
-                      Navigator.pop(context);
-                    },
-                  ))
-              .toList(),
-        ),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('Currency',
+                style: AppTextStyles.titleLg.copyWith(fontSize: 16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.rCardLg)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ...options.map((opt) => ListTile(
+                      title: Text(opt),
+                      trailing: opt == current
+                          ? const Icon(Icons.check, color: AppColors.primary)
+                          : null,
+                      enabled: !busy,
+                      onTap: () async {
+                        setState(() {
+                          busy = true;
+                          error = null;
+                        });
+                        try {
+                          await ref
+                              .read(storeSettingsProvider.notifier)
+                              .updateCurrency(opt);
+                          if (context.mounted) Navigator.pop(context);
+                        } catch (err) {
+                          setState(() {
+                            busy = false;
+                            error = err.toString();
+                          });
+                        }
+                      },
+                    )),
+                if (busy)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: AppSizes.sm),
+                    child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                  ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: AppSizes.sm),
+                    child: Text(error!,
+                        style: const TextStyle(color: AppColors.error)),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -294,7 +490,7 @@ class _NavTile extends StatelessWidget {
   });
   final String label;
   final String value;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -458,6 +654,56 @@ class _PrefSwitch extends StatelessWidget {
   }
 }
 
+// ── Staff directory tile ──────────────────────────────────────────────────────
+
+class _StaffDirectoryTile extends ConsumerWidget {
+  const _StaffDirectoryTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Just watched to keep this tile in sync once Cloud connects — the
+    // screen itself re-fetches via its own provider watch.
+    ref.watch(staffDirectoryProvider);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppSizes.rCard),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const StaffDirectoryScreen()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSizes.lg, vertical: AppSizes.md),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppSizes.rCard),
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x0A000000), blurRadius: 3, offset: Offset(0, 1)),
+          ],
+        ),
+        child: Row(children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primaryLight,
+              borderRadius: BorderRadius.circular(AppSizes.rInput),
+            ),
+            child: const Icon(Icons.badge_outlined,
+                color: AppColors.primary, size: 18),
+          ),
+          const SizedBox(width: AppSizes.md),
+          Expanded(
+            child: Text('Staff directory',
+                style: AppTextStyles.labelMd.copyWith(fontSize: 14)),
+          ),
+          const Icon(Icons.chevron_right, color: AppColors.gray400, size: 18),
+        ]),
+      ),
+    );
+  }
+}
+
 // ── Cloud sync tile ───────────────────────────────────────────────────────────
 
 class _CloudSyncTile extends ConsumerWidget {
@@ -570,6 +816,10 @@ class _CloudSyncDialogState extends ConsumerState<_CloudSyncDialog> {
             email: _email.text,
             password: _password.text,
           );
+      // Store settings and the staff directory couldn't be fetched before a
+      // session existed — load them now that connectAndSync has established one.
+      await ref.read(storeSettingsProvider.notifier).load();
+      await ref.read(staffDirectoryProvider.notifier).load();
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
@@ -583,6 +833,7 @@ class _CloudSyncDialogState extends ConsumerState<_CloudSyncDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final target = ref.watch(syncTargetProvider);
     return AlertDialog(
       title: const Text('Connect Xantara Cloud'),
       content: SizedBox(
@@ -590,9 +841,31 @@ class _CloudSyncDialogState extends ConsumerState<_CloudSyncDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Use a Xantara web administrator account. The password is sent '
-              'only to Xantara Cloud and is never saved on this device.',
+            SegmentedButton<SyncTarget>(
+              segments: const [
+                ButtonSegment(
+                  value: SyncTarget.local,
+                  label: Text('Local'),
+                  icon: Icon(Icons.computer, size: 16),
+                ),
+                ButtonSegment(
+                  value: SyncTarget.cloud,
+                  label: Text('VPS Cloud'),
+                  icon: Icon(Icons.cloud_outlined, size: 16),
+                ),
+              ],
+              selected: {target},
+              onSelectionChanged: _busy
+                  ? null
+                  : (selection) => ref
+                      .read(syncTargetProvider.notifier)
+                      .select(selection.first),
+            ),
+            const SizedBox(height: AppSizes.sm),
+            Text(
+              'Use an administrator account for this backend: '
+              '${target.baseUrl}. '
+              'Your password is not saved on this device.',
             ),
             const SizedBox(height: AppSizes.md),
             TextField(

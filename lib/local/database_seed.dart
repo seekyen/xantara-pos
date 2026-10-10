@@ -116,28 +116,35 @@ Future<void> seedDatabaseIfEmpty(AppDatabase database) async {
             );
       }
     }
-  });
 
-  final staffAuth = StaffAuthRepository(database);
-  final allBranchIds = _branchNames.keys.map(branchIdForCode).toSet();
-  await staffAuth.createStaff(CreateStaffRequest(
-    displayName: 'Store Owner',
-    email: seedOwnerEmail,
-    role: StaffRole.owner,
-    password: seedOwnerPassword,
-    branchIds: allBranchIds,
-    createdBy: 'system-seed',
-    createdAt: now,
-  ));
-  await staffAuth.createStaff(CreateStaffRequest(
-    displayName: 'Cashier One',
-    email: seedCashierEmail,
-    role: StaffRole.cashier,
-    password: seedCashierPassword,
-    branchIds: {branchIdForCode('MAIN')},
-    createdBy: 'system-seed',
-    createdAt: now,
-  ));
+    // Staff creation happens inside the SAME transaction as everything above
+    // (Drift nests it via a savepoint) so seeding is all-or-nothing. Previously
+    // this ran as separate, unprotected calls after the transaction committed —
+    // if staff creation failed partway (e.g. a slow/interrupted password hash on
+    // web), branches were already committed, "the database is empty" no longer
+    // held on the next launch, and seeding silently never retried — leaving a
+    // database with branches but no staff accounts able to log in, permanently.
+    final staffAuth = StaffAuthRepository(database);
+    final allBranchIds = _branchNames.keys.map(branchIdForCode).toSet();
+    await staffAuth.createStaff(CreateStaffRequest(
+      displayName: 'Store Owner',
+      email: seedOwnerEmail,
+      role: StaffRole.owner,
+      password: seedOwnerPassword,
+      branchIds: allBranchIds,
+      createdBy: 'system-seed',
+      createdAt: now,
+    ));
+    await staffAuth.createStaff(CreateStaffRequest(
+      displayName: 'Cashier One',
+      email: seedCashierEmail,
+      role: StaffRole.cashier,
+      password: seedCashierPassword,
+      branchIds: {branchIdForCode('MAIN')},
+      createdBy: 'system-seed',
+      createdAt: now,
+    ));
+  });
 
   debugPrint(
     'Xantara POS: seeded demo accounts — '

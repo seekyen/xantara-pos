@@ -3,11 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
 
-// Store settings
-final branchProvider = StateProvider<String>((ref) => 'Main Branch');
-final receiptHeaderProvider =
-    StateProvider<String>((ref) => 'Thank you for shopping with us!');
-final currencyProvider = StateProvider<String>((ref) => 'PHP');
+// Store name, receipt header, and currency moved to store_settings_provider.dart —
+// they're shared with the admin web dashboard via the backend, not per-device state.
 
 // Preferences
 final printOnCheckoutProvider = StateProvider<bool>((ref) => false);

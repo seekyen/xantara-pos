@@ -15,6 +15,8 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/cashier/screens/cashier_dashboard_screen.dart';
 import '../../features/orders/screens/orders_screen.dart';
 import '../../features/readiness/screens/improvements_lab_screen.dart';
+import '../../features/business_profiles/business_profile_providers.dart';
+import '../../features/business_profiles/business_profiles_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -22,6 +24,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final auth = ref.read(authProvider);
       final loc = state.matchedLocation;
+      if (loc == '/business-profiles') return null;
 
       if (loc == '/') return null; // let splash handle it
 
@@ -34,9 +37,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Redirect away from login if already authenticated
       if (loc == '/login') return isAdmin ? '/admin' : '/cashier';
 
+      if (loc == '/pos' || loc.startsWith('/pos/')) {
+        if (ref.read(activeBusinessProfileProvider) != null) {
+          final type = ref.read(businessCheckoutTypeProvider);
+          if (type == null) return '/business-profiles';
+          if (loc != type.route) return type.route;
+        }
+      }
+
       return null;
     },
     routes: [
+      GoRoute(
+          path: '/business-profiles',
+          builder: (context, state) => const BusinessProfilesScreen()),
       GoRoute(
         path: '/',
         builder: (context, state) => const SplashScreen(),

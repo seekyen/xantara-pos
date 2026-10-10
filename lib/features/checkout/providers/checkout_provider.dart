@@ -107,6 +107,9 @@ class Order {
   final BirReceiptDetails? birReceipt;
   final String paymentReference;
 
+  /// Loyalty customer and estimated points shown on the receipt preview (the cloud confirms them).
+  final String? loyaltyNote;
+
   const Order({
     required this.id,
     required this.items,
@@ -117,6 +120,7 @@ class Order {
     this.change,
     this.birReceipt,
     required this.paymentReference,
+    this.loyaltyNote,
   });
 }
 
@@ -131,6 +135,7 @@ Order buildOrder({
   double? cashReceived,
   BirReceiptDetails? birReceipt,
   required String paymentReference,
+  String? loyaltyNote,
 }) {
   return Order(
     id: id ?? newOrderId(),
@@ -149,6 +154,7 @@ Order buildOrder({
     timestamp: timestamp ?? DateTime.now(),
     birReceipt: birReceipt,
     paymentReference: paymentReference,
+    loyaltyNote: loyaltyNote,
   );
 }
 
@@ -172,7 +178,8 @@ BirReceiptDetails birReceiptFromInvoice(bir.BirInvoice invoice) =>
       machineIdentificationNumber: invoice.seller.machineIdentificationNumber,
       permitToUseNumber: invoice.seller.permitToUseNumber,
       machineSerialNumber: invoice.seller.machineSerialNumber,
-      isTraining: true,
+      isTraining:
+          invoice.seller.machineIdentificationNumber.startsWith('TRAINING-'),
     );
 
 final lastOrderProvider = StateProvider<Order?>((ref) => null);

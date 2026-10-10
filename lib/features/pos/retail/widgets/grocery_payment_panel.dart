@@ -5,15 +5,18 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_sizes.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../providers/grocery_cart_provider.dart';
+import '../../../setup/company_setup_screen.dart';
 
 class GroceryPaymentPanel extends ConsumerStatefulWidget {
-  const GroceryPaymentPanel({super.key, required this.onCharge, required this.onSelectMethod});
+  const GroceryPaymentPanel(
+      {super.key, required this.onCharge, required this.onSelectMethod});
 
   final VoidCallback onCharge;
   final void Function(GroceryPaymentMethod method) onSelectMethod;
 
   @override
-  ConsumerState<GroceryPaymentPanel> createState() => _GroceryPaymentPanelState();
+  ConsumerState<GroceryPaymentPanel> createState() =>
+      _GroceryPaymentPanelState();
 }
 
 class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
@@ -29,6 +32,11 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
   }
 
   void _applyCoupon() {
+    if (!ref.read(isDemoInstallationProvider)) {
+      setState(() =>
+          _couponError = 'Demo coupons are unavailable for company sales');
+      return;
+    }
     final code = _couponCtrl.text.trim().toUpperCase();
     final amount = groceryCoupons[code];
     if (amount == null) {
@@ -62,7 +70,8 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
         children: [
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSizes.md),
-            child: Center(child: Text('Payment Options', style: AppTextStyles.titleLg)),
+            child: Center(
+                child: Text('Payment Options', style: AppTextStyles.titleLg)),
           ),
           const Divider(height: 1, color: AppColors.gray200),
           Expanded(
@@ -72,20 +81,24 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('SELECT METHOD',
-                      style: AppTextStyles.labelCaps.copyWith(color: AppColors.gray400)),
+                      style: AppTextStyles.labelCaps
+                          .copyWith(color: AppColors.gray400)),
                   const SizedBox(height: AppSizes.sm),
                   for (final m in GroceryPaymentMethod.values) ...[
                     _PaymentMethodRow(
                       method: m,
                       selected: method == m,
-                      onTap: () => widget.onSelectMethod(m),
+                      onTap: m == GroceryPaymentMethod.cash
+                          ? () => widget.onSelectMethod(m)
+                          : null,
                     ),
                     if (m != GroceryPaymentMethod.values.last)
                       const SizedBox(height: AppSizes.sm),
                   ],
                   const SizedBox(height: AppSizes.lg),
                   Text('COUPON',
-                      style: AppTextStyles.labelCaps.copyWith(color: AppColors.gray400)),
+                      style: AppTextStyles.labelCaps
+                          .copyWith(color: AppColors.gray400)),
                   const SizedBox(height: AppSizes.sm),
                   if (coupon == null)
                     Row(
@@ -100,10 +113,13 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                               errorText: _couponError,
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: AppSizes.md, vertical: AppSizes.sm),
+                                  horizontal: AppSizes.md,
+                                  vertical: AppSizes.sm),
                               border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AppSizes.rInput),
-                                  borderSide: const BorderSide(color: AppColors.gray200)),
+                                  borderRadius:
+                                      BorderRadius.circular(AppSizes.rInput),
+                                  borderSide: const BorderSide(
+                                      color: AppColors.gray200)),
                             ),
                             onSubmitted: (_) => _applyCoupon(),
                           ),
@@ -116,9 +132,11 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                             foregroundColor: Colors.white,
                             elevation: 0,
                             minimumSize: const Size(0, 40),
-                            padding: const EdgeInsets.symmetric(horizontal: AppSizes.md),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppSizes.md),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(AppSizes.rInput)),
+                                borderRadius:
+                                    BorderRadius.circular(AppSizes.rInput)),
                           ),
                           child: const Text('Apply'),
                         ),
@@ -140,11 +158,13 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                           Expanded(
                             child: Text(coupon.code,
                                 style: AppTextStyles.bodyMd.copyWith(
-                                    color: AppColors.success, fontWeight: FontWeight.w600)),
+                                    color: AppColors.success,
+                                    fontWeight: FontWeight.w600)),
                           ),
                           GestureDetector(
                             onTap: () {
-                              ref.read(groceryCouponProvider.notifier).state = null;
+                              ref.read(groceryCouponProvider.notifier).state =
+                                  null;
                               _couponCtrl.clear();
                             },
                             child: const Text('Remove',
@@ -158,16 +178,20 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                     ),
                   const SizedBox(height: AppSizes.lg),
                   Text('DISCOUNT',
-                      style: AppTextStyles.labelCaps.copyWith(color: AppColors.gray400)),
+                      style: AppTextStyles.labelCaps
+                          .copyWith(color: AppColors.gray400)),
                   const SizedBox(height: AppSizes.sm),
                   Row(
                     children: [
                       Expanded(
                         child: _DiscountButton(
                           label: 'Senior / PWD',
-                          subtitle: '20% off',
-                          selected: discountKind == GroceryDiscountKind.seniorPwd,
-                          onTap: () => ref.read(groceryDiscountKindProvider.notifier).state =
+                          subtitle: 'Apply at payment',
+                          selected:
+                              discountKind == GroceryDiscountKind.seniorPwd,
+                          onTap: () => ref
+                                  .read(groceryDiscountKindProvider.notifier)
+                                  .state =
                               discountKind == GroceryDiscountKind.seniorPwd
                                   ? null
                                   : GroceryDiscountKind.seniorPwd,
@@ -179,7 +203,9 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                           label: 'Others',
                           subtitle: null,
                           selected: discountKind == GroceryDiscountKind.custom,
-                          onTap: () => ref.read(groceryDiscountKindProvider.notifier).state =
+                          onTap: () => ref
+                                  .read(groceryDiscountKindProvider.notifier)
+                                  .state =
                               discountKind == GroceryDiscountKind.custom
                                   ? null
                                   : GroceryDiscountKind.custom,
@@ -194,18 +220,23 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                         Expanded(
                           child: TextField(
                             controller: _customDiscountCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             style: AppTextStyles.bodyMd,
                             decoration: InputDecoration(
                               isDense: true,
                               hintText: 'Amount',
                               contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: AppSizes.md, vertical: AppSizes.sm),
+                                  horizontal: AppSizes.md,
+                                  vertical: AppSizes.sm),
                               border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AppSizes.rInput)),
+                                  borderRadius:
+                                      BorderRadius.circular(AppSizes.rInput)),
                             ),
-                            onChanged: (v) =>
-                                ref.read(groceryCustomDiscountAmountProvider.notifier).state = v,
+                            onChanged: (v) => ref
+                                .read(groceryCustomDiscountAmountProvider
+                                    .notifier)
+                                .state = v,
                           ),
                         ),
                         const SizedBox(width: AppSizes.sm),
@@ -213,11 +244,15 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                           value: customUnit,
                           items: const [
                             DropdownMenuItem(
-                                value: GroceryDiscountUnit.percent, child: Text('%')),
-                            DropdownMenuItem(value: GroceryDiscountUnit.peso, child: Text('₱')),
+                                value: GroceryDiscountUnit.percent,
+                                child: Text('%')),
+                            DropdownMenuItem(
+                                value: GroceryDiscountUnit.peso,
+                                child: Text('₱')),
                           ],
-                          onChanged: (v) =>
-                              ref.read(groceryCustomDiscountUnitProvider.notifier).state = v!,
+                          onChanged: (v) => ref
+                              .read(groceryCustomDiscountUnitProvider.notifier)
+                              .state = v!,
                         ),
                       ],
                     ),
@@ -229,13 +264,15 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                       children: [
                         Text(
                           discountKind == GroceryDiscountKind.seniorPwd
-                              ? 'Senior / PWD (20%)'
+                              ? 'Senior / PWD (at payment)'
                               : 'Discount',
-                          style: AppTextStyles.bodyMd.copyWith(color: AppColors.success),
+                          style: AppTextStyles.bodyMd
+                              .copyWith(color: AppColors.success),
                         ),
                         Text('— ₱${discountAmount.toStringAsFixed(2)}',
-                            style: AppTextStyles.bodyMd
-                                .copyWith(color: AppColors.success, fontWeight: FontWeight.w600)),
+                            style: AppTextStyles.bodyMd.copyWith(
+                                color: AppColors.success,
+                                fontWeight: FontWeight.w600)),
                       ],
                     ),
                   ],
@@ -246,8 +283,10 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Subtotal',
-                          style: AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
-                      Text('₱${subtotal.toStringAsFixed(2)}', style: AppTextStyles.bodyMd),
+                          style: AppTextStyles.bodyMd
+                              .copyWith(color: AppColors.gray600)),
+                      Text('₱${subtotal.toStringAsFixed(2)}',
+                          style: AppTextStyles.bodyMd),
                     ],
                   ),
                   if (coupon != null) ...[
@@ -256,10 +295,11 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Coupon',
-                            style:
-                                AppTextStyles.bodyMd.copyWith(color: AppColors.gray600)),
+                            style: AppTextStyles.bodyMd
+                                .copyWith(color: AppColors.gray600)),
                         Text('— ₱${coupon.amountOff.toStringAsFixed(2)}',
-                            style: AppTextStyles.bodyMd.copyWith(color: AppColors.success)),
+                            style: AppTextStyles.bodyMd
+                                .copyWith(color: AppColors.success)),
                       ],
                     ),
                   ],
@@ -278,12 +318,12 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Total due',
-                                  style: AppTextStyles.bodyMd
-                                      .copyWith(color: AppColors.whiteOverlay60)),
+                                  style: AppTextStyles.bodyMd.copyWith(
+                                      color: AppColors.whiteOverlay60)),
                               const SizedBox(height: 2),
                               Text('₱${totalDue.toStringAsFixed(2)}',
-                                  style: AppTextStyles.titleLg
-                                      .copyWith(color: Colors.white, fontSize: 20)),
+                                  style: AppTextStyles.titleLg.copyWith(
+                                      color: Colors.white, fontSize: 20)),
                             ],
                           ),
                         ),
@@ -302,14 +342,16 @@ class _GroceryPaymentPanelState extends ConsumerState<GroceryPaymentPanel> {
                         foregroundColor: AppColors.gray800,
                         side: const BorderSide(color: AppColors.gray800),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppSizes.rButton)),
+                            borderRadius:
+                                BorderRadius.circular(AppSizes.rButton)),
                       ),
                       child: const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.arrow_forward_rounded, size: 18),
                           SizedBox(width: AppSizes.xs),
-                          Text('Charge', style: TextStyle(fontWeight: FontWeight.w700)),
+                          Text('Charge',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
                         ],
                       ),
                     ),
@@ -335,7 +377,7 @@ class _DiscountButton extends StatelessWidget {
   final String label;
   final String? subtitle;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -343,9 +385,11 @@ class _DiscountButton extends StatelessWidget {
       onPressed: onTap,
       style: OutlinedButton.styleFrom(
         backgroundColor: selected ? AppColors.primaryLight : null,
-        side: BorderSide(color: selected ? AppColors.primary : AppColors.gray200),
+        side:
+            BorderSide(color: selected ? AppColors.primary : AppColors.gray200),
         padding: const EdgeInsets.symmetric(vertical: AppSizes.sm),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.rButton)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.rButton)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -376,7 +420,7 @@ class _PaymentMethodRow extends StatelessWidget {
 
   final GroceryPaymentMethod method;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   IconData get _icon => switch (method) {
         GroceryPaymentMethod.cash => Icons.payments_rounded,
@@ -392,11 +436,13 @@ class _PaymentMethodRow extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: AppSizes.sm),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSizes.md, vertical: AppSizes.sm),
         decoration: BoxDecoration(
           color: selected ? AppColors.gray800 : Colors.white,
           borderRadius: BorderRadius.circular(AppSizes.rCard),
-          border: Border.all(color: selected ? AppColors.gray800 : AppColors.gray200),
+          border: Border.all(
+              color: selected ? AppColors.gray800 : AppColors.gray200),
         ),
         child: Row(
           children: [
@@ -413,7 +459,9 @@ class _PaymentMethodRow extends StatelessWidget {
             const SizedBox(width: AppSizes.sm),
             Expanded(
               child: Text(
-                method.label,
+                method == GroceryPaymentMethod.cash
+                    ? method.label
+                    : '${method.label} (unavailable)',
                 style: AppTextStyles.bodyMd.copyWith(
                   color: selected ? Colors.white : AppColors.gray800,
                   fontWeight: FontWeight.w600,
@@ -421,7 +469,8 @@ class _PaymentMethodRow extends StatelessWidget {
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSizes.sm, vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.sm, vertical: 2),
               decoration: BoxDecoration(
                 color: selected ? AppColors.white20 : AppColors.gray50,
                 borderRadius: BorderRadius.circular(AppSizes.rBadgeSm),
@@ -429,7 +478,8 @@ class _PaymentMethodRow extends StatelessWidget {
               child: Text(
                 method.shortcutLabel,
                 style: AppTextStyles.caption.copyWith(
-                  color: selected ? AppColors.whiteOverlay60 : AppColors.gray400,
+                  color:
+                      selected ? AppColors.whiteOverlay60 : AppColors.gray400,
                   fontWeight: FontWeight.w600,
                 ),
               ),

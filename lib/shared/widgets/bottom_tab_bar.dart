@@ -65,7 +65,7 @@ class BottomTabBar extends StatelessWidget {
                   if (currentIndex != 2) context.go('/inventory');
                 },
               ),
-            ],
+            ].map((item) => Expanded(child: item)).toList(),
           ),
         ),
       ),
@@ -97,7 +97,7 @@ class _TabItem extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -105,6 +105,8 @@ class _TabItem extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 10,
                 fontWeight:

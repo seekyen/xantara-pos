@@ -8,6 +8,20 @@ abstract interface class LocalPosStore {
   Future<void> remove(String key);
 }
 
+/// Keeps registered-company sessions and cached settings apart from the demo.
+class ScopedPosStore implements LocalPosStore {
+  const ScopedPosStore(this.store, this.scope);
+  final LocalPosStore store;
+  final String scope;
+  @override
+  Future<String?> read(String key) => store.read('$scope:$key');
+  @override
+  Future<void> write(String key, String value) =>
+      store.write('$scope:$key', value);
+  @override
+  Future<void> remove(String key) => store.remove('$scope:$key');
+}
+
 class SharedPreferencesPosStore implements LocalPosStore {
   const SharedPreferencesPosStore(this.preferences);
 

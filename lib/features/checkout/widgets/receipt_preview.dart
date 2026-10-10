@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/hardware/pos_hardware.dart';
 import 'package:intl/intl.dart';
 import '../providers/checkout_provider.dart';
 import '../../../core/constants/app_colors.dart';
@@ -7,11 +8,28 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../shared/widgets/status_banner.dart';
 
 class ReceiptPreview extends StatelessWidget {
-  const ReceiptPreview({super.key, required this.order});
+  const ReceiptPreview({super.key, required this.order, this.receipt});
   final Order order;
+  final ReceiptPrintData? receipt;
 
   @override
   Widget build(BuildContext context) {
+    if (receipt != null) {
+      return AlertDialog(
+          title: const Text('Sale saved'),
+          content: SizedBox(
+              width: 460,
+              child: SingleChildScrollView(
+                  child: SelectableText(
+                      const BirReceiptFormatter().format(receipt!),
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 12)))),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('New Sale'))
+          ]);
+    }
     final bir = order.birReceipt;
     final txnId = order.id.length >= 12
         ? order.id.substring(0, 12).toUpperCase()
@@ -149,6 +167,13 @@ class ReceiptPreview extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSizes.sm),
 
+                    if (order.loyaltyNote != null) ...[
+                      Text(order.loyaltyNote!,
+                          style: AppTextStyles.bodySm
+                              .copyWith(color: AppColors.success)),
+                      const SizedBox(height: AppSizes.sm),
+                    ],
+
                     if (bir != null) ...[
                       _ReceiptRow(
                         label: 'VATable Sales',
@@ -228,7 +253,8 @@ class ReceiptPreview extends StatelessWidget {
                         borderRadius: BorderRadius.circular(AppSizes.rButton)),
                   ),
                   child: Text('New Sale',
-                      style: AppTextStyles.titleMd.copyWith(color: Colors.white)),
+                      style:
+                          AppTextStyles.titleMd.copyWith(color: Colors.white)),
                 ),
               ),
             ],

@@ -1,0 +1,13 @@
+# Linked cash credit notes
+
+Implemented 10 October 2026 for Food & Beverage and Grocery/Retail. Order History offers **Returns / credit notes** for saved invoices. Choose returned quantities, optional sellable-stock restoration, reason, and supervisor credentials; confirm the linked cash payout. A saved note can be downloaded as a text copy. The original invoice is retained unchanged.
+
+The supported settlement is cash on the original terminal, with an opened drawer and no loyalty-linked invoice. Noncash, loyalty, cross-terminal/exchange workflows and physical credit-note printing remain pending. Restaurant is deferred. Do not enter another manual payout for the same refund.
+
+Schema 13 adds immutable credit notes and a separate per-terminal CN sequence. Each note records its original invoice, line quantities, allocated discount/VAT relief/tax, operator, supervisor, reason and restock choices. Cumulative integer allocation conserves original cents across partial returns. Original issue evidence and audit integrity are verified. Transactions atomically save the note, allocate its number, restore selected units, record one linked cash event, append journal/audit evidence and enqueue sync. Idempotency keys prevent repeat submission; excess quantities and voiding an invoice with credit notes are rejected.
+
+X/Z and journal subtract credit amounts and taxes on the return's posting day; original closed readings remain unchanged. Cash refund events reduce expected drawer cash once and invalidate an earlier count. Statutory totals reverse proportionately; the beneficiary register remains an issue-date register, and BNPC allowance is not automatically reinstated.
+
+The matching Django backend validates original quantities and monetary allocation, rejects duplicate notes and excess returns, and projects only explicitly restocked units. Deploy this handler with the client before production use; local sync tests do not establish production acceptance. Older source events without allocation evidence are rejected for review.
+
+Verification: 170 Flutter tests passed; final seven return tests passed after adding original-line/audit verification. Final lib/test analysis clean; release web build passed. Backend: 22 isolated sync tests passed. Tests cover split/full cents, restart, duplicate retry, stock/no-stock, same/later-day reports, immutable old Z, authorization, stale amount, excess quantity, rollback and schema-12 migration. Logs: `tmp/statutory-work/returns-*.log`. No new browser/device walkthrough, physical printer test, production deployment or real business transaction was performed.

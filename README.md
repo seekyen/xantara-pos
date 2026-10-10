@@ -1,16 +1,290 @@
-# pos_app
+# XantaraPOS
 
-A new Flutter project.
+XantaraPOS is an offline-first point-of-sale system for retail and food service.
+The system combines a Flutter register application, a Next.js administration
+portal, a Django REST API, and a customer-facing catalog PWA.
 
-## Getting Started
+This repository contains the canonical Flutter POS client. The other services
+are maintained as sibling repositories in the local development workspace.
 
-This project is a starting point for a Flutter application.
+## System Architecture
 
-A few resources to get you started if this is your first Flutter project:
+```mermaid
+flowchart LR
+    POS[Flutter POS] -->|local transactions| Drift[(Drift / SQLite)]
+    POS -->|authenticated sync| API[Django REST API]
+    Admin[Next.js Admin Portal] -->|JWT REST requests| API
+    PWA[Customer Catalog PWA] -->|same-origin proxy| API
+    API --> CloudDB[(MySQL or SQL Server)]
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+### Applications
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+| Application | Local directory | Responsibility | Default URL |
+| --- | --- | --- | --- |
+| Flutter POS | `Xantara-POS` | Register, checkout, offline storage, hardware, staff authorization, and sync | Platform dependent |
+| Admin portal | `xantara-web-frontend` | Inventory, sales, customers, suppliers, branches, staff, reports, and settings | `http://127.0.0.1:3000` |
+| REST API | `xantara-web-backend` | Authentication, central business data, inventory projection, reporting, and sync | `http://127.0.0.1:8000` |
+| Customer PWA | `xantara-customer-pwa` | Public branch catalog and printable branch QR codes | `http://127.0.0.1:3001` |
+
+Expected local workspace:
+
+```text
+C:\Dev\
+|-- Xantara-POS\
+|-- xantara-web-frontend\
+|-- xantara-web-backend\
+`-- xantara-customer-pwa\
+```
+
+## Flutter Repository Layout
+
+```text
+Xantara-POS/
+|-- assets/                  Brand images and application assets
+|-- docs/                    Architecture, compliance, deployment, and handoff notes
+|-- lib/
+|   |-- core/                Auth, compliance, hardware, networking, payments, routing, sync
+|   |-- features/            POS, checkout, orders, inventory, analytics, settings, and displays
+|   |-- local/               Drift schema, DAOs, local models, seeds, and repositories
+|   |-- shared/              Reusable providers, services, and widgets
+|   |-- app.dart             Material application and router binding
+|   `-- main.dart            Database, window, and provider initialization
+|-- test/                    Unit, repository, integration, and widget tests
+|-- android/ ios/ macos/     Mobile and macOS platform projects
+|-- linux/ windows/ web/     Desktop and web platform projects
+`-- pubspec.yaml             Flutter dependencies and asset configuration
+```
+
+Flutter development and production builds start from the repository root and
+`lib/main.dart`.
+
+## Core Flutter Design
+
+- **State management:** Riverpod with explicit providers.
+- **Navigation:** GoRouter with authenticated admin and cashier routes.
+- **Local persistence:** Drift over SQLite, including web worker and WASM support.
+- **Offline operation:** Local repositories persist sales and durable sync work.
+- **POS modes:** Food-service and grocery/retail register experiences.
+- **Customer display:** A secondary desktop window driven by shared POS state.
+- **Hardware:** Receipt printing and extensible POS hardware job processing.
+- **Compliance:** BIR invoice, audit trail, and reporting foundations.
+- **Cloud synchronization:** Durable outbound synchronization is implemented;
+  complete server-to-register pull synchronization remains an evolving area.
+
+See [docs/OFFLINE_ARCHITECTURE.md](docs/OFFLINE_ARCHITECTURE.md),
+[docs/INVENTORY_SYNC_API.md](docs/INVENTORY_SYNC_API.md), and
+[docs/BIR_COMPLIANCE_BASELINE.md](docs/BIR_COMPLIANCE_BASELINE.md) for the
+detailed contracts.
+
+## Prerequisites
+
+- Flutter stable with Dart `>=3.3.0 <4.0.0`
+- Node.js suitable for Next.js 16
+- Python 3.13 and the backend packages in `requirements.txt`
+- MySQL for the normal local/production-style backend, or SQLite for an isolated demo
+- A supported browser for the web clients
+
+On Windows, Visual Studio Desktop development with C++ is also required for the
+Flutter Windows build.
+
+## Quick Start
+
+Start the backend first, then the web applications. The Flutter POS can run
+independently against its local database, but cloud features require the API.
+
+### 1. Start the Django API
+
+```powershell
+cd C:\Dev\xantara-web-backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Choose one database configuration and use it consistently for `migrate`,
+`seed_data`, `check`, and `runserver`.
+
+For an isolated SQLite demo:
+
+```powershell
+python manage.py migrate --settings=config.settings.sqlite_local
+python manage.py seed_data --settings=config.settings.sqlite_local
+python manage.py runserver 127.0.0.1:8000 --settings=config.settings.sqlite_local
+```
+
+For MySQL local development, copy `.env.example` to `.env`, configure the
+database values, create the database, and run:
+
+```powershell
+python manage.py migrate --settings=config.settings.local
+python manage.py seed_data --settings=config.settings.local
+python manage.py runserver 127.0.0.1:8000 --settings=config.settings.local
+```
+
+The seed command prints local demonstration credentials. Seeded credentials are
+for development only and must never be used in production.
+
+> Important: `config.settings.local` and `config.settings.sqlite_local` target
+> different databases. Running migrations with one and the server with the other
+> produces missing-table errors even when Django reports migrations as applied.
+
+### 2. Start the administration portal
+
+```powershell
+cd C:\Dev\xantara-web-frontend
+npm ci
+$env:NEXT_PUBLIC_API_URL="http://127.0.0.1:8000"
+npm run dev -- --hostname 127.0.0.1 --port 3000
+```
+
+Open `http://127.0.0.1:3000`.
+
+`NEXT_PUBLIC_API_URL` is embedded into the browser bundle. Set it before running
+the development server or production build. Production normally uses the
+same-origin `/api/` reverse proxy and does not need a localhost fallback.
+
+### 3. Start the customer catalog PWA
+
+```powershell
+cd C:\Dev\xantara-customer-pwa
+Copy-Item .env.example .env.local
+npm ci
+npm run dev -- --hostname 127.0.0.1 --port 3001
+```
+
+Open `http://127.0.0.1:3001/b/MAIN`, replacing `MAIN` with an active inventory
+branch code. The printable QR page is `/qr/MAIN`.
+
+### 4. Run the Flutter POS
+
+```powershell
+cd C:\Dev\Xantara-POS
+flutter pub get
+flutter run -d windows
+```
+
+Other useful targets:
+
+For the optimized browser preview connected to the local Django backend, start
+the backend on port 8000, then run:
+
+```powershell
+.\scripts\start-local-preview.ps1
+```
+
+Open `http://127.0.0.1:8086/#/login`. API and media requests proxy to
+`http://127.0.0.1:8000`; this avoids cross-origin restrictions on sync headers.
+Port `8086` is the canonical local URL for the Flutter Xantara application.
+Sign in with the device's local POS account, then use **Settings → Cloud sync**
+to connect a local backend administrator. Backend accounts and offline POS
+accounts are separate. Sync uploads still require registered backend installation
+and branch mappings. No account or installation is created by the preview script.
+Backend credentials are stored separately from production credentials.
+
+In the Flutter app, open **Settings → App display**. **Mobile layout** limits
+the app to a phone-sized viewport on larger screens; turn it off for automatic
+screen sizing. Phones use the responsive layout automatically. The grocery
+register separates Items and Payment into tabs on narrow screens.
+
+On Windows, **Floating window** switches the whole POS to a compact, movable,
+resizable window. **Always on top** keeps it above other applications. These
+preferences are saved on the device and restored on startup.
+
+```powershell
+flutter run -d chrome
+flutter run -d android
+```
+
+After changing Drift schemas or generated models, regenerate sources:
+
+```powershell
+dart run build_runner build --delete-conflicting-outputs
+```
+
+## Validation
+
+Run these checks before publishing changes.
+
+### Flutter POS
+
+```powershell
+flutter analyze --no-fatal-infos
+flutter test
+```
+
+### Django API
+
+Use the same settings module used by the running server:
+
+```powershell
+python manage.py check --settings=config.settings.sqlite_local
+python manage.py test --settings=config.settings.sqlite_local
+```
+
+### Admin portal
+
+```powershell
+npm run lint
+npm run build
+```
+
+### Customer PWA
+
+```powershell
+npm run lint
+npm run build
+```
+
+## Data and Sync Boundaries
+
+- The Flutter register owns its local offline database and must remain usable
+  during network loss.
+- The Django API is the central authority for web administration and cloud data.
+- Register uploads use authenticated, idempotent sync events.
+- Inventory-affecting server events are projected atomically.
+- The admin portal writes directly to the authenticated REST API.
+- The customer PWA reads only the public branch catalog projection and does not
+  expose internal stock or product-management fields.
+
+Do not bypass repository or service boundaries with direct database access from
+the frontend applications.
+
+## Production Notes
+
+- Use `config.settings.production` with MySQL or SQL Server.
+- Store secrets in deployment environment variables, never in Git.
+- Serve the admin portal and API behind HTTPS and a same-origin reverse proxy.
+- Set exact `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and
+  `CSRF_TRUSTED_ORIGINS` values.
+- Back up the database before migrations and deploy application releases
+  atomically with a tested rollback path.
+- Customer QR codes must use the deployed HTTPS customer-app origin.
+
+Deployment details are maintained in
+[docs/HOSTINGER_DEMO_DEPLOYMENT.md](docs/HOSTINGER_DEMO_DEPLOYMENT.md).
+
+## Contributing
+
+1. Keep changes scoped to the owning repository and layer.
+2. Preserve offline behavior when changing checkout, inventory, or sync logic.
+3. Add focused tests for business rules and cross-service contracts.
+4. Do not commit local databases, build output, logs, credentials, or generated
+   scratch files.
+5. Update the relevant architecture document when a public contract changes.
+
+## Repository Status Notes
+
+- [BIR pre-assessment package](docs/BIR_PRE_ASSESSMENT_PACKAGE_2026-10-10.md): proposed classification/scope, output matrix, evidence inventory and questions for preliminary RDO confirmation.
+
+- [Device and printer acceptance pack](docs/DEVICE_ACCEPTANCE_PACK.md): controlled target-device scenarios, evidence rules, reconciliation and sign-off gates.
+
+- [Linked cash credit notes](docs/CREDIT_NOTES.md): partial/full returns, supervisor authorization, selected restocking and linked cash/report adjustments.
+
+- [Senior/PWD workflow](docs/STATUTORY_DISCOUNTS.md): owner-configured eligibility, beneficiary evidence and supporting reports for F&B and Grocery/Retail.
+
+- `lib/` is the canonical Flutter application.
+- `build/`, `.dart_tool/`, `.tools/`, `output/`, and `tmp/` are generated or
+  local-only directories and are excluded from version control.
+- Generated platform registrant files should change only when plugin
+  dependencies change.

@@ -9,10 +9,13 @@ class SaleRecord {
   final PaymentEvidence payment;
 }
 
-bir.BirInvoice assembleInvoice(Invoice row, List<InvoiceLine> lines) {
+bir.BirInvoice assembleInvoice(Invoice row, List<InvoiceLine> lines,
+    {Map<String, dynamic> particulars = const {}}) {
   return bir.BirInvoice(
     id: row.id,
     invoiceNumber: row.invoiceNumber,
+    statutoryDiscount: Map<String, dynamic>.from(
+        particulars['statutoryDiscount'] as Map? ?? {}),
     issuedAt: row.issuedAt,
     seller: bir.BirSellerProfile(
       registeredName: row.sellerName,
@@ -26,6 +29,8 @@ bir.BirInvoice assembleInvoice(Invoice row, List<InvoiceLine> lines) {
       machineSerialNumber: row.machineSerialNumber,
       softwareName: row.softwareName,
       softwareVersion: row.softwareVersion,
+      invoiceFooter: Map.unmodifiable(
+          Map<String, String>.from(particulars['footer'] as Map? ?? {})),
     ),
     buyer: row.buyerName == null
         ? null
@@ -33,6 +38,7 @@ bir.BirInvoice assembleInvoice(Invoice row, List<InvoiceLine> lines) {
             registeredName: row.buyerName!,
             tin: row.buyerTin,
             address: row.buyerAddress,
+            isBusiness: particulars['buyerBusiness'] == true,
           ),
     lines: List.unmodifiable(
       lines.map(
@@ -42,6 +48,10 @@ bir.BirInvoice assembleInvoice(Invoice row, List<InvoiceLine> lines) {
           quantity: line.quantity,
           unitPriceCentavos: line.unitPriceCentavos,
           discountCentavos: line.discountCentavos,
+          vatReliefCentavos:
+              ((particulars['statutoryDiscount'] as Map?)?['lines']
+                      as Map?)?[line.productId]?['vatReliefCentavos'] as int? ??
+                  0,
           taxCategory: bir.TaxCategory.values.byName(line.taxCategory),
         ),
       ),

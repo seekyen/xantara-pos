@@ -5,16 +5,23 @@ import 'package:pos_app/app.dart';
 import 'package:pos_app/local/database.dart';
 import 'package:pos_app/local/database_providers.dart';
 import 'package:pos_app/local/database_seed.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pos_app/features/settings/providers/display_preferences.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
     await seedDatabaseIfEmpty(database);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [appDatabaseProvider.overrideWithValue(database)],
+        overrides: [
+          appDatabaseProvider.overrideWithValue(database),
+          displayPreferencesStoreProvider.overrideWithValue(preferences),
+        ],
         child: const PosApp(),
       ),
     );

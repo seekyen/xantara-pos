@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/settings/providers/settings_provider.dart';
+import 'features/settings/providers/display_preferences.dart';
 
 class PosApp extends ConsumerWidget {
   const PosApp({super.key});
@@ -20,6 +21,10 @@ class PosApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => DeviceAppViewport(
+        device: ref.watch(displayPreferencesProvider).device,
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

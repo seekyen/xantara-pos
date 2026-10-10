@@ -12,6 +12,8 @@ class ReceiptPrintData {
     required this.cashierName,
     required this.isReprint,
     this.reprintedAt,
+    this.loyaltyCustomerName,
+    this.loyaltyEstimatedPoints = 0,
   });
 
   final BirInvoice invoice;
@@ -19,6 +21,11 @@ class ReceiptPrintData {
   final String cashierName;
   final bool isReprint;
   final DateTime? reprintedAt;
+
+  /// The customer the sale was attached to and the points the POS estimated for it (the cloud
+  /// confirms the final amount when the invoice syncs).
+  final String? loyaltyCustomerName;
+  final int loyaltyEstimatedPoints;
 }
 
 class BirReceiptFormatter {
@@ -30,13 +37,22 @@ class BirReceiptFormatter {
     final invoice = data.invoice;
     final seller = invoice.seller;
     final buffer = StringBuffer();
+    if (seller.machineIdentificationNumber.startsWith('TRAINING-')) {
+      buffer.writeln(_center('TRAINING - NOT A SALES INVOICE'));
+      buffer.writeln(_line());
+    }
     if (data.isReprint) {
       buffer.writeln(_center('REPRINT ONLY'));
       buffer.writeln(_line());
     }
     buffer.writeln(_center(seller.registeredName));
     buffer.writeln(_center(seller.registeredAddress));
-    buffer.writeln(_center('TIN: ${seller.tin}'));
+    final digits = seller.tin.replaceAll(RegExp(r'[^0-9]'), '');
+    final identifier = digits.length == 9
+        ? '${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6)}-${seller.branchCode}'
+        : seller.tin;
+    buffer.writeln(_center(
+        '${seller.registrationType == TaxRegistrationType.vat ? 'VAT' : 'NON-VAT'} REG TIN: $identifier'));
     buffer.writeln(_center('BRANCH: ${seller.branchCode}'));
     buffer.writeln(_center(
       seller.registrationType == TaxRegistrationType.vat
@@ -51,7 +67,8 @@ class BirReceiptFormatter {
     }
     buffer.writeln(_line());
     buffer.writeln('Invoice No: ${invoice.invoiceNumber}');
-    buffer.writeln('Date: ${invoice.issuedAt.toIso8601String()}');
+    buffer.writeln(
+        'Date (Asia/Manila): ${invoice.issuedAt.toUtc().add(const Duration(hours: 8)).toIso8601String().substring(0, 19).replaceFirst('T', ' ')}');
     buffer.writeln('Cashier: ${data.cashierName}');
     buffer.writeln('MIN: ${seller.machineIdentificationNumber}');
     buffer.writeln('PTU: ${seller.permitToUseNumber}');
@@ -68,8 +85,19 @@ class BirReceiptFormatter {
       if (invoice.buyer!.address?.trim().isNotEmpty ?? false) {
         buffer.writeln('Buyer Address: ${invoice.buyer!.address}');
       }
+    } else {
+      buffer.writeln('Buyer: ____________________');
+      buffer.writeln('Buyer TIN: ________________');
+      buffer.writeln('Buyer Address: ____________');
     }
     buffer.writeln(_line());
+    if (invoice.statutoryDiscount.isNotEmpty) {
+      final claim = invoice.statutoryDiscount['claim'] as Map;
+      buffer.writeln(
+          '${claim['kind'].toString().toUpperCase()} / ${claim['scheme']}');
+      buffer.writeln('Beneficiary: ${claim['name']}');
+      buffer.writeln('${claim['idType']}: ${claim['idNumber']}');
+    }
     for (final item in invoice.lines) {
       buffer.writeln(item.description);
       buffer.writeln(
@@ -78,6 +106,10 @@ class BirReceiptFormatter {
           _money(item.netCentavos),
         ),
       );
+      if (item.vatReliefCentavos > 0) {
+        buffer.writeln(
+            _columns('VAT removed', '-${_money(item.vatReliefCentavos)}'));
+      }
       if (item.discountCentavos > 0) {
         buffer.writeln(
           _columns('Discount', '-${_money(item.discountCentavos)}'),
@@ -119,12 +151,44 @@ class BirReceiptFormatter {
         _money(data.payment.changeCentavos ?? 0),
       ));
     }
+    if (data.loyaltyCustomerName != null &&
+        invoice.status != InvoiceStatus.voided) {
+      buffer.writeln(_line());
+      buffer.writeln('Customer: ${data.loyaltyCustomerName}');
+      if (data.loyaltyEstimatedPoints > 0) {
+        buffer.writeln(
+            'Points earned: ~${data.loyaltyEstimatedPoints} (confirmed on sync)');
+      }
+    }
     if (data.isReprint) {
       buffer.writeln(_line());
       buffer.writeln(_center('REPRINT ONLY'));
       if (data.reprintedAt != null) {
         buffer.writeln(
             _center('Reprinted: ${data.reprintedAt!.toIso8601String()}'));
+      }
+    }
+    if (seller.registrationType == TaxRegistrationType.nonVat) {
+      buffer.writeln(_line());
+      buffer.writeln('THIS DOCUMENT IS NOT VALID');
+      buffer.writeln('FOR CLAIM OF INPUT TAX.');
+    }
+    if (seller.invoiceFooter.isNotEmpty) {
+      buffer.writeln(_line());
+      const labels = <String, String>{
+        'ptuIssuedOn': 'PTU issued',
+        'supplierName': 'Supplier',
+        'supplierAddress': 'Supplier address',
+        'supplierTin': 'Supplier TIN',
+        'accreditationNumber': 'Accreditation No',
+        'accreditationIssuedOn': 'Accreditation issued',
+        'accreditationValidUntil': 'Accreditation valid until'
+      };
+      for (final e in labels.entries) {
+        final value = seller.invoiceFooter[e.key];
+        if (value != null && value.isNotEmpty) {
+          buffer.writeln('${e.value}: $value');
+        }
       }
     }
     return buffer.toString();
@@ -168,7 +232,8 @@ class LoggingReceiptPrinterAdapter implements ReceiptPrinterAdapter {
   final void Function(String jobId, String formattedReceipt)? onPrint;
 
   @override
-  Future<void> printReceipt(String formattedReceipt, {required String jobId}) async {
+  Future<void> printReceipt(String formattedReceipt,
+      {required String jobId}) async {
     onPrint?.call(jobId, formattedReceipt);
   }
 }

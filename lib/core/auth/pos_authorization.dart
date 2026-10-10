@@ -3,6 +3,7 @@ enum StaffRole { owner, admin, manager, cashier, inventoryClerk, auditor }
 enum PosPermission {
   createSale,
   voidInvoice,
+  issueCreditNote,
   reprintInvoice,
   viewInventory,
   adjustInventory,
@@ -11,6 +12,9 @@ enum PosPermission {
   cancelTransfer,
   manageSupplierConnectors,
   viewReports,
+  viewTerminalReading,
+  closeBusinessDay,
+  recordCashDrawer,
   manageSettings,
   manageStaff,
   monitorPremium,
@@ -41,6 +45,7 @@ class PosAuthorizationPolicy {
     StaffRole.manager: {
       PosPermission.createSale,
       PosPermission.voidInvoice,
+      PosPermission.issueCreditNote,
       PosPermission.reprintInvoice,
       PosPermission.viewInventory,
       PosPermission.adjustInventory,
@@ -48,8 +53,13 @@ class PosAuthorizationPolicy {
       PosPermission.receiveTransfer,
       PosPermission.cancelTransfer,
       PosPermission.viewReports,
+      PosPermission.viewTerminalReading,
+      PosPermission.closeBusinessDay,
+      PosPermission.recordCashDrawer,
     },
     StaffRole.cashier: {
+      PosPermission.recordCashDrawer,
+      PosPermission.viewTerminalReading,
       PosPermission.createSale,
       PosPermission.viewInventory,
     },
@@ -60,6 +70,7 @@ class PosAuthorizationPolicy {
       PosPermission.receiveTransfer,
     },
     StaffRole.auditor: {
+      PosPermission.viewTerminalReading,
       PosPermission.viewInventory,
       PosPermission.viewReports,
     },
